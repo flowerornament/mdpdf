@@ -1,0 +1,31 @@
+[package]
+name = "mdpdf"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT"
+description = "Markdown-to-PDF transducer with built-in unicode math support"
+
+[[bin]]
+name = "mdpdf"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+rayon = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tempfile = "3"
+which = "7"
+
+[profile.release]
+lto = true
+strip = true
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
