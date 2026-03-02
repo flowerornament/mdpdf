@@ -2,7 +2,7 @@
 
 Markdown-to-PDF transducer with built-in unicode math support.
 
-Converts markdown to beautifully typeset PDFs via pandoc + tectonic. Ships with 150+ unicode character mappings that handle the math symbols, Greek letters, and special characters commonly found in LLM-generated technical documents.
+Converts markdown to beautifully typeset PDFs using embedded typst. Handles unicode math, Greek letters, and special characters natively — zero external dependencies.
 
 ## Install
 
@@ -32,7 +32,7 @@ cat doc.md | mdpdf -o doc.pdf
 # Batch with structured output
 mdpdf *.md --json
 
-# Preview the pandoc command
+# Preview generated typst source
 mdpdf doc.md --dry-run
 
 # Custom layout
@@ -44,12 +44,12 @@ ls *.md | get name | each { mdpdf $in --json } | from json
 
 ## Features
 
-- **Unicode math** — 150+ character mappings (Greek, operators, arrows, set theory, sub/superscripts, blackboard bold, and more)
-- **Layout tolerances** — tuned for wide tables and dense content without overflow warnings
+- **Native unicode** — Greek letters, math operators, arrows, set theory, sub/superscripts, blackboard bold — all rendered natively by typst
+- **LaTeX math** — `$$E = mc^2$$` fenced math blocks rendered via mitex
+- **Zero dependencies** — typst compiler and fonts are embedded in the binary
 - **Parallel rendering** — batch converts up to 8 files concurrently (configurable with `-J`)
 - **Structured output** — `--json` emits one JSONL object per file with timing and error details
-- **Dry run** — `--dry-run` prints the pandoc command without executing
-- **RAII cleanup** — temp files cleaned up automatically, even on signals
+- **Dry run** — `--dry-run` prints the generated typst source without rendering
 
 ## Flags
 
@@ -60,10 +60,9 @@ ls *.md | get name | each { mdpdf $in --json } | from json
 | `--number-sections / --no-number-sections` | `--number-sections` | Section numbering |
 | `--margin` | `1in` | Page margins |
 | `--font-size` | `11pt` | Font size |
-| `--document-class` | `article` | LaTeX document class |
-| `--include-header` | — | Additional LaTeX header file |
+| `--include-preamble` | — | Additional typst code to prepend |
 | `-j, --json` | off | JSONL structured output |
-| `--dry-run` | off | Print pandoc command only |
+| `--dry-run` | off | Print typst source only |
 | `-J, --jobs` | `8` | Max parallel render jobs |
 
 ## Exit Codes
@@ -72,14 +71,6 @@ ls *.md | get name | each { mdpdf $in --json } | from json
 |------|---------|
 | 0 | All files rendered successfully |
 | 1 | One or more render failures |
-| 2 | Missing dependency (pandoc or tectonic) |
-
-## Requirements
-
-- [pandoc](https://pandoc.org/) — document converter
-- [tectonic](https://tectonic-typesetting.github.io/) — LaTeX engine
-
-Both must be on PATH. mdpdf checks for them at startup.
 
 ## License
 

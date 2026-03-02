@@ -4,40 +4,15 @@
 
 mdpdf crystallizes a 181-line `scripts/build-pdfs.sh` from the murail project into a standalone, general-purpose UNIX tool.
 
-### Original pandoc invocation
+### Original pipeline
 
-```bash
-pandoc "$md" -o "$out" \
-  --pdf-engine=tectonic \
-  -V geometry:margin=1in -V fontsize=11pt -V documentclass=article \
-  --toc --number-sections \
-  --include-in-header="$HEADER"
-```
-
-### Original LaTeX preamble
-
-The header included these packages and settings:
-- `fontspec` — OpenType font support under XeTeX/LuaTeX
-- `newunicodechar` — maps bare unicode codepoints to LaTeX commands
-- `amsmath, amssymb` — standard math symbols
-- `stmaryrd` — additional math operators (semantic brackets, etc.)
-- `etoolbox` — hooks for environment modification
-
-Layout tolerances:
-- `\tolerance=2000` — allow looser line breaking to avoid overfull hboxes
-- `\emergencystretch=5em` — last resort stretch before giving up on line breaking
-- `\hfuzz=2pt` — suppress warnings for lines overflowing by less than 2pt
-- `\tabcolsep=3pt` — tighter table columns for wide specification tables
-- `\AtBeginEnvironment{longtable}{\footnotesize}` — shrink long tables to fit
-
-80+ `\newunicodechar` mappings covering Greek letters, math operators, arrows, set theory, subscripts/superscripts, and blackboard bold.
+The original used pandoc + tectonic with 150+ `\newunicodechar` LaTeX mappings. mdpdf v0.2 replaced this with embedded typst — zero external CLI dependencies, native unicode support.
 
 ### What worked
 
-- pandoc + tectonic as the rendering pipeline (reliable, no TeX Live dependency hell)
 - The unicode character mappings (LLM output renders correctly)
 - Layout tolerances (wide tables and dense content handled gracefully)
-- Parallel execution via xargs (fast batch rendering)
+- Parallel execution (fast batch rendering)
 
 ### What didn't
 
@@ -48,6 +23,21 @@ Layout tolerances:
 - No structured output — just `ok`/`FAIL` text, no machine-readable results
 
 ## Design
+
+### Architecture
+
+mdpdf compiles markdown to PDF entirely in-process using typst as an embedded library. No external CLI tools are required.
+
+Pipeline: **Markdown → cmarker (CommonMark → typst) → mitex (LaTeX math → typst math) → typst compiler → PDF bytes**
+
+Key crates:
+- `typst-as-lib` — Builder wrapping the typst compiler with font embedding
+- `typst-pdf` — PDF export from compiled typst documents
+- `typst-embedded-package` — Compile-time embedding of typst package tarballs
+
+Embedded packages:
+- `@preview/cmarker:0.1.8` — CommonMark rendering in typst
+- `@preview/mitex:0.2.6` — LaTeX math rendering in typst
 
 ### Transducer model
 
@@ -97,7 +87,6 @@ Rendered 5 files (1 failures)
 |------|---------|
 | 0 | All files rendered successfully |
 | 1 | One or more render failures, or invalid arguments |
-| 2 | Missing required dependency (pandoc or tectonic not on PATH) |
 
 ### Flags
 
@@ -107,49 +96,25 @@ Rendered 5 files (1 failures)
 | `--number-sections` | on | Cross-referencing needs section numbers |
 | `--margin 1in` | `1in` | Standard readable margin |
 | `--font-size 11pt` | `11pt` | Slightly larger than default for readability |
-| `--document-class article` | `article` | Most common for technical documents |
-| `--include-header FILE` | none | Escape hatch for custom LaTeX |
+| `--include-preamble FILE` | none | Escape hatch for custom typst code |
 | `--json` / `-j` | off | Machine-readable output |
-| `--dry-run` | off | Debug without rendering |
+| `--dry-run` | off | Print generated typst source |
 | `--jobs N` / `-J N` | 8 | Match typical core count |
 
 ## Robustness
 
-### Dependency detection
-
-At startup, check for `pandoc` and `tectonic` on PATH using the `which` crate. Exit with code 2 and a clear error message if either is missing. Skip this check in `--dry-run` mode.
-
 ### Error reporting
 
-Capture pandoc/tectonic stderr and relay it in the `error` field of `RenderResult`. Never swallow errors. In human mode, show the first 10 lines of error output indented under the FAIL line.
-
-### Temp file cleanup
-
-The LaTeX preamble is written to a `NamedTempFile` (from the `tempfile` crate). The file is automatically deleted when the `NamedTempFile` is dropped — RAII cleanup, no signal handler needed.
+Typst compilation errors are captured and relayed in the `error` field of `RenderResult`. Never swallow errors. In human mode, show the first 10 lines of error output indented under the FAIL line.
 
 ### Parallel rendering
 
-Uses rayon's thread pool, not shell xargs. Each render job gets its own temp file for the preamble. Thread count configurable via `--jobs`.
-
-### Edge cases
-
-- **Empty input**: pandoc handles gracefully (produces minimal PDF)
-- **Binary input**: pandoc will error, captured and reported
-- **Missing files**: checked by pandoc, error captured
-- **Very large files**: streaming to disk via pandoc — no memory issues in mdpdf itself
-- **Unicode gaps**: preamble audited against common LLM output patterns; extended from 80 to 150+ mappings
+Uses rayon's thread pool. Thread count configurable via `--jobs`.
 
 ### Unicode coverage
 
-Extended beyond the original script to cover:
-- Complete Greek alphabet (lowercase + uppercase)
-- Full subscript/superscript digit ranges (₀-₉, ⁰-⁹)
-- Additional math operators (≡, ∘, √, ∝, ≪, ≫, ≺, ≻)
-- Category theory arrows (↪, ↠, ⟶, ⟵)
-- Logic symbols (⊢, ⊣, ⊨, ⊩)
-- Lattice operators (⊑, ⊒)
-- Calligraphic letters (ℒ, ℋ, ℱ, 𝒪)
-- Additional blackboard bold (ℚ, ℂ, 𝔽)
-- Delimiters (⟨, ⟩, ⌊, ⌋, ⌈, ⌉)
-- Calculus (∇, ∫, ∮)
-- Miscellaneous (…, ⋯, ⋮, ⋱, ℓ, ℏ, ℘, ℵ)
+Typst handles unicode natively — no character mapping tables needed. Greek letters, math operators, arrows, subscripts, superscripts, and all other unicode symbols render correctly out of the box.
+
+### Fonts
+
+Fonts are embedded at compile time via `typst-kit` with the `embed-fonts` feature. Default fonts include Libertinus Serif, New Computer Modern, and DejaVu Sans Mono. No system font dependencies at runtime.

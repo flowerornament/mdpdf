@@ -4,9 +4,9 @@ use clap::Parser;
 
 /// Markdown-to-PDF transducer with built-in unicode math support.
 ///
-/// Converts markdown files to beautifully typeset PDFs using pandoc and tectonic.
-/// Includes comprehensive unicode math character mappings for LLM-generated
-/// technical content.
+/// Converts markdown files to beautifully typeset PDFs using typst.
+/// Handles unicode math, Greek letters, and special characters natively
+/// with zero external dependencies.
 #[derive(Parser, Debug)]
 #[command(version, about)]
 #[allow(clippy::struct_excessive_bools)]
@@ -17,7 +17,7 @@ EXAMPLES:
     mdpdf a.md b.md c.md            Convert multiple files in parallel
     mdpdf *.md --json               Batch convert with JSONL output
     cat doc.md | mdpdf -o doc.pdf   Convert from stdin
-    mdpdf doc.md --dry-run          Print pandoc command without running it
+    mdpdf doc.md --dry-run          Print generated typst source
     mdpdf doc.md --no-toc           Skip table of contents generation
     mdpdf doc.md --margin 0.75in    Custom margins")]
 pub struct Cli {
@@ -45,7 +45,7 @@ pub struct Cli {
     #[arg(long)]
     pub no_number_sections: bool,
 
-    /// Page margin (passed to geometry package).
+    /// Page margin (e.g. 1in, 0.75in, 2cm).
     #[arg(long, default_value = "1in")]
     pub margin: String,
 
@@ -53,19 +53,15 @@ pub struct Cli {
     #[arg(long, default_value = "11pt")]
     pub font_size: String,
 
-    /// LaTeX document class.
-    #[arg(long, default_value = "article")]
-    pub document_class: String,
-
-    /// Additional file to include in LaTeX header.
+    /// Additional typst code to include before the template.
     #[arg(long)]
-    pub include_header: Option<PathBuf>,
+    pub include_preamble: Option<PathBuf>,
 
     /// Output JSONL structured results (one JSON object per file).
     #[arg(long, short = 'j')]
     pub json: bool,
 
-    /// Print the pandoc command without executing it.
+    /// Print generated typst source without rendering.
     #[arg(long)]
     pub dry_run: bool,
 

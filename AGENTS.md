@@ -4,7 +4,7 @@ General-purpose markdown-to-PDF transducer with built-in unicode math support.
 
 ## Goal
 
-A proper UNIX tool that does one thing well: convert markdown to beautiful PDFs, with good defaults for LLM-generated technical content. No config files — flags only.
+A proper UNIX tool that does one thing well: convert markdown to beautiful PDFs, with good defaults for LLM-generated technical content. No config files — flags only. No external CLI dependencies — typst is embedded.
 
 ## Quick Start
 
@@ -22,9 +22,10 @@ cat notes.md | mdpdf -o out.pdf # stdin → file
 | `src/main.rs` | Entry point — delegates to lib |
 | `src/lib.rs` | `run()` + `run_with()` — orchestration and CLI dispatch |
 | `src/cli.rs` | Clap types and flag definitions |
-| `src/render.rs` | Core transducer — pandoc command builder, preamble management |
+| `src/render.rs` | Core transducer — typst compilation, package resolver, PDF export |
 | `src/report.rs` | `RenderResult` type, human and JSON output formatting |
-| `src/preamble.tex` | LaTeX header with 150+ unicode math mappings |
+| `src/template.typ` | Typst template with cmarker + mitex integration |
+| `src/typst-packages/` | Embedded package tarballs (cmarker, mitex) |
 
 ## Build & Quality
 
@@ -47,10 +48,6 @@ Managed via `rust-toolchain.toml` — stable channel with rustfmt and clippy com
 
 A Stop hook runs `just check` before ending any session. If fmt, lint, or tests fail, the session blocks until you fix the issues.
 
-## Runtime Dependencies
-
-pandoc and tectonic must be on PATH. They are NOT bundled — the tool checks for them at startup and exits with code 2 if missing.
-
 ## Lint Config
 
 ```toml
@@ -64,7 +61,8 @@ unsafe_code = "forbid"
 
 ## Notes
 
-- The preamble is embedded at compile time via `include_str!` — no runtime file lookup
-- Temp files use the `tempfile` crate for RAII cleanup (no shell traps needed)
-- Parallel rendering via rayon, not shell xargs
-- Exit codes: 0 = success, 1 = render failure, 2 = missing dependency
+- The typst template is embedded at compile time via `include_str!` — no runtime file lookup
+- Package tarballs (cmarker, mitex) are embedded at compile time via `include_package!`
+- Fonts are embedded via `typst-kit` with `embed-fonts` — no system font dependencies
+- Parallel rendering via rayon
+- Exit codes: 0 = success, 1 = render failure

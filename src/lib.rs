@@ -9,9 +9,7 @@ use clap::Parser;
 use rayon::prelude::*;
 
 use cli::Cli;
-use render::{
-    check_dependencies, default_output_path, format_dry_run_command, render_one, render_stdin,
-};
+use render::{default_output_path, format_dry_run, render_one, render_stdin};
 
 #[must_use]
 pub fn run() -> ExitCode {
@@ -21,18 +19,6 @@ pub fn run() -> ExitCode {
 
 #[must_use]
 pub fn run_with(cli: &Cli) -> ExitCode {
-    // Check dependencies unless dry-run
-    if !cli.dry_run
-        && let Err(missing) = check_dependencies()
-    {
-        eprintln!(
-            "error: missing required dependencies: {}",
-            missing.join(", ")
-        );
-        eprintln!("install them and ensure they are on PATH");
-        return ExitCode::from(2);
-    }
-
     // Stdin mode: no files given
     if cli.files.is_empty() {
         return run_stdin(cli);
@@ -47,12 +33,15 @@ pub fn run_with(cli: &Cli) -> ExitCode {
     // Dry-run mode
     if cli.dry_run {
         for file in &cli.files {
-            let output = cli
-                .output
-                .clone()
-                .unwrap_or_else(|| default_output_path(file));
-            let cmd = format_dry_run_command(&file.display().to_string(), &output, cli);
-            println!("{cmd}");
+            let content = match std::fs::read_to_string(file) {
+                Ok(c) => c,
+                Err(e) => {
+                    eprintln!("error: failed to read {}: {e}", file.display());
+                    return ExitCode::from(1);
+                }
+            };
+            let source = format_dry_run(&content, cli);
+            println!("{source}");
             if cli.files.len() > 1 {
                 println!();
             }
@@ -138,8 +127,8 @@ fn run_stdin(cli: &Cli) -> ExitCode {
     };
 
     if cli.dry_run {
-        let cmd = format_dry_run_command("<stdin>", &output, cli);
-        println!("{cmd}");
+        let source = format_dry_run("<stdin content>", cli);
+        println!("{source}");
         return ExitCode::SUCCESS;
     }
 

@@ -1,114 +1,177 @@
-use std::io::{self, Read, Write};
+use std::borrow::Cow;
+use std::collections::HashMap;
+use std::io::{self, Read};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::sync::LazyLock;
 use std::time::Instant;
 
 use anyhow::{Context, Result, bail};
-use tempfile::NamedTempFile;
+use typst::diag::{FileError, FileResult};
+use typst::foundations::{Bytes, Dict, IntoValue};
+use typst::layout::PagedDocument;
+use typst::syntax::{FileId, Source};
+use typst_as_lib::TypstEngine;
+use typst_as_lib::file_resolver::FileResolver;
+use typst_as_lib::typst_kit_options::TypstKitFontOptions;
+use typst_embedded_package::{self as tep, Package, include_package};
+use typst_pdf::PdfOptions;
 
 use crate::cli::Cli;
 use crate::report::RenderResult;
 
-const PREAMBLE: &str = include_str!("preamble.tex");
+const TEMPLATE: &str = include_str!("template.typ");
+
+static PACKAGES: LazyLock<[Package; 2]> = LazyLock::new(|| {
+    include_package!(
+        "typst-packages"
+        [
+            "preview" "cmarker" (0, 1, 8),
+            "preview" "mitex" (0, 2, 6),
+        ]
+    )
+});
+
+/// Resolves files from embedded typst packages.
+struct EmbeddedPackageResolver {
+    sources: HashMap<FileId, Source>,
+    binaries: HashMap<FileId, Bytes>,
+}
+
+impl EmbeddedPackageResolver {
+    fn new(packages: &[Package]) -> Self {
+        let mut sources = HashMap::new();
+        let mut binaries = HashMap::new();
+
+        for pkg in packages {
+            if let Ok(files) = pkg.read_archive() {
+                for file in files {
+                    match file {
+                        tep::File::Source(source) => {
+                            sources.insert(source.id(), source);
+                        }
+                        tep::File::File(id, bytes) => {
+                            binaries.insert(id, bytes);
+                        }
+                    }
+                }
+            }
+        }
+
+        Self { sources, binaries }
+    }
+}
+
+impl FileResolver for EmbeddedPackageResolver {
+    fn resolve_binary(&self, id: FileId) -> FileResult<Cow<'_, Bytes>> {
+        self.binaries
+            .get(&id)
+            .map(Cow::Borrowed)
+            .ok_or_else(|| FileError::NotFound(id.vpath().as_rootless_path().into()))
+    }
+
+    fn resolve_source(&self, id: FileId) -> FileResult<Cow<'_, Source>> {
+        self.sources
+            .get(&id)
+            .map(Cow::Borrowed)
+            .ok_or_else(|| FileError::NotFound(id.vpath().as_rootless_path().into()))
+    }
+}
 
 fn elapsed_ms(start: &Instant) -> u64 {
     u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX)
 }
 
-pub fn check_dependencies() -> Result<(), Vec<String>> {
-    let mut missing = Vec::new();
-    if which::which("pandoc").is_err() {
-        missing.push("pandoc".to_string());
-    }
-    if which::which("tectonic").is_err() {
-        missing.push("tectonic".to_string());
-    }
-    if missing.is_empty() {
-        Ok(())
+fn build_inputs(content: &str, cli: &Cli) -> Dict {
+    let mut dict = Dict::new();
+    dict.insert("content".into(), content.into_value());
+    dict.insert("margin".into(), cli.margin.as_str().into_value());
+    dict.insert("font-size".into(), cli.font_size.as_str().into_value());
+    dict.insert(
+        "toc".into(),
+        cli.toc_enabled().to_string().as_str().into_value(),
+    );
+    dict.insert(
+        "number-sections".into(),
+        cli.number_sections_enabled()
+            .to_string()
+            .as_str()
+            .into_value(),
+    );
+    dict
+}
+
+fn compile_to_pdf(content: &str, cli: &Cli) -> Result<Vec<u8>> {
+    let inputs = build_inputs(content, cli);
+
+    // Read optional preamble
+    let preamble = if let Some(ref path) = cli.include_preamble {
+        let extra = std::fs::read_to_string(path)
+            .with_context(|| format!("failed to read preamble file: {}", path.display()))?;
+        format!("{extra}\n")
     } else {
-        Err(missing)
+        String::new()
+    };
+
+    let full_template = format!("{preamble}{TEMPLATE}");
+
+    // Build package resolver
+    let pkg_resolver = EmbeddedPackageResolver::new(&*PACKAGES);
+
+    // Build engine with embedded fonts and packages
+    let font_opts = TypstKitFontOptions::new().include_system_fonts(false);
+    let engine = TypstEngine::builder()
+        .main_file(("main.typ", full_template.as_str()))
+        .search_fonts_with(font_opts)
+        .add_file_resolver(pkg_resolver)
+        .build();
+
+    // Compile with inputs
+    let compiled = engine.compile_with_input(inputs);
+
+    // Log warnings
+    for warning in &compiled.warnings {
+        eprintln!("  typst warning: {warning:?}");
     }
+
+    let document: PagedDocument = compiled
+        .output
+        .map_err(|e| anyhow::anyhow!("typst compilation failed: {e}"))?;
+
+    // Export to PDF
+    let pdf_bytes = typst_pdf::pdf(&document, &PdfOptions::default()).map_err(|diagnostics| {
+        let msgs: Vec<String> = diagnostics.iter().map(|d| format!("{d:?}")).collect();
+        anyhow::anyhow!("PDF export failed:\n{}", msgs.join("\n"))
+    })?;
+
+    Ok(pdf_bytes)
 }
 
-fn write_preamble(extra_header: Option<&Path>) -> Result<NamedTempFile> {
-    let mut file = NamedTempFile::new().context("failed to create temp preamble file")?;
-    file.write_all(PREAMBLE.as_bytes())
-        .context("failed to write preamble")?;
+pub fn format_dry_run(content: &str, cli: &Cli) -> String {
+    let mut parts = vec![String::from("// sys.inputs:")];
 
-    if let Some(header_path) = extra_header {
-        let extra = std::fs::read_to_string(header_path)
-            .with_context(|| format!("failed to read header file: {}", header_path.display()))?;
-        file.write_all(b"\n").context("failed to write newline")?;
-        file.write_all(extra.as_bytes())
-            .context("failed to write extra header")?;
-    }
-
-    file.flush().context("failed to flush preamble")?;
-    Ok(file)
-}
-
-fn build_pandoc_command(input: &Path, output: &Path, preamble_path: &Path, cli: &Cli) -> Command {
-    let mut cmd = Command::new("pandoc");
-    cmd.arg(input);
-    cmd.arg("-o").arg(output);
-    cmd.arg("--pdf-engine=tectonic");
-    cmd.arg(format!("-V geometry:margin={}", cli.margin));
-    cmd.arg(format!("-V fontsize={}", cli.font_size));
-    cmd.arg(format!("-V documentclass={}", cli.document_class));
-
-    if cli.toc_enabled() {
-        cmd.arg("--toc");
-    }
-    if cli.number_sections_enabled() {
-        cmd.arg("--number-sections");
-    }
-
-    cmd.arg("--include-in-header").arg(preamble_path);
-    cmd
-}
-
-fn build_stdin_command(output: &Path, preamble_path: &Path, cli: &Cli) -> Command {
-    let mut cmd = Command::new("pandoc");
-    cmd.arg("-f").arg("markdown");
-    cmd.arg("-o").arg(output);
-    cmd.arg("--pdf-engine=tectonic");
-    cmd.arg(format!("-V geometry:margin={}", cli.margin));
-    cmd.arg(format!("-V fontsize={}", cli.font_size));
-    cmd.arg(format!("-V documentclass={}", cli.document_class));
-
-    if cli.toc_enabled() {
-        cmd.arg("--toc");
-    }
-    if cli.number_sections_enabled() {
-        cmd.arg("--number-sections");
-    }
-
-    cmd.arg("--include-in-header").arg(preamble_path);
-    cmd.stdin(std::process::Stdio::piped());
-    cmd
-}
-
-pub fn format_dry_run_command(input: &str, output: &Path, cli: &Cli) -> String {
-    let mut parts = vec![
-        "pandoc".to_string(),
-        input.to_string(),
-        "-o".to_string(),
-        output.display().to_string(),
-        "--pdf-engine=tectonic".to_string(),
-        format!("-V geometry:margin={}", cli.margin),
-        format!("-V fontsize={}", cli.font_size),
-        format!("-V documentclass={}", cli.document_class),
+    let inputs_display: Vec<(&str, String)> = vec![
+        ("content", format!("<{} bytes>", content.len())),
+        ("font-size", cli.font_size.clone()),
+        ("margin", cli.margin.clone()),
+        ("number-sections", cli.number_sections_enabled().to_string()),
+        ("toc", cli.toc_enabled().to_string()),
     ];
 
-    if cli.toc_enabled() {
-        parts.push("--toc".to_string());
+    for (k, v) in &inputs_display {
+        parts.push(format!("//   {k}: {v}"));
     }
-    if cli.number_sections_enabled() {
-        parts.push("--number-sections".to_string());
+    parts.push(String::new());
+
+    if let Some(ref path) = cli.include_preamble {
+        parts.push(format!("// preamble: {}", path.display()));
+        if let Ok(extra) = std::fs::read_to_string(path) {
+            parts.push(extra);
+            parts.push(String::new());
+        }
     }
 
-    parts.push("--include-in-header=<preamble>".to_string());
-    parts.join(" \\\n  ")
+    parts.push(TEMPLATE.to_string());
+    parts.join("\n")
 }
 
 pub fn default_output_path(input: &Path) -> PathBuf {
@@ -118,46 +181,43 @@ pub fn default_output_path(input: &Path) -> PathBuf {
 pub fn render_one(input: &Path, output: &Path, cli: &Cli) -> RenderResult {
     let start = Instant::now();
 
-    let preamble = match write_preamble(cli.include_header.as_deref()) {
-        Ok(p) => p,
+    let content = match std::fs::read_to_string(input) {
+        Ok(c) => c,
         Err(e) => {
             return RenderResult {
                 input: input.display().to_string(),
                 output: output.display().to_string(),
                 success: false,
                 time_ms: elapsed_ms(&start),
-                error: Some(e.to_string()),
+                error: Some(format!("failed to read {}: {e}", input.display())),
             };
         }
     };
 
-    let result = build_pandoc_command(input, output, preamble.path(), cli).output();
-
-    let elapsed = elapsed_ms(&start);
-
-    match result {
-        Ok(out) if out.status.success() => RenderResult {
-            input: input.display().to_string(),
-            output: output.display().to_string(),
-            success: true,
-            time_ms: elapsed,
-            error: None,
-        },
-        Ok(out) => {
-            let stderr = String::from_utf8_lossy(&out.stderr);
+    match compile_to_pdf(&content, cli) {
+        Ok(pdf_bytes) => {
+            if let Err(e) = std::fs::write(output, &pdf_bytes) {
+                return RenderResult {
+                    input: input.display().to_string(),
+                    output: output.display().to_string(),
+                    success: false,
+                    time_ms: elapsed_ms(&start),
+                    error: Some(format!("failed to write {}: {e}", output.display())),
+                };
+            }
             RenderResult {
                 input: input.display().to_string(),
                 output: output.display().to_string(),
-                success: false,
-                time_ms: elapsed,
-                error: Some(stderr.to_string()),
+                success: true,
+                time_ms: elapsed_ms(&start),
+                error: None,
             }
         }
         Err(e) => RenderResult {
             input: input.display().to_string(),
             output: output.display().to_string(),
             success: false,
-            time_ms: elapsed,
+            time_ms: elapsed_ms(&start),
             error: Some(e.to_string()),
         },
     }
@@ -166,49 +226,33 @@ pub fn render_one(input: &Path, output: &Path, cli: &Cli) -> RenderResult {
 pub fn render_stdin(output: &Path, cli: &Cli) -> Result<RenderResult> {
     let start = Instant::now();
 
-    let mut input_data = Vec::new();
+    let mut content = String::new();
     io::stdin()
-        .read_to_end(&mut input_data)
+        .read_to_string(&mut content)
         .context("failed to read stdin")?;
 
-    if input_data.is_empty() {
+    if content.is_empty() {
         bail!("no input on stdin");
     }
 
-    let preamble = write_preamble(cli.include_header.as_deref())?;
-
-    let mut child = build_stdin_command(output, preamble.path(), cli)
-        .spawn()
-        .context("failed to start pandoc")?;
-
-    if let Some(mut stdin) = child.stdin.take() {
-        stdin
-            .write_all(&input_data)
-            .context("failed to write to pandoc stdin")?;
-    }
-
-    let out = child
-        .wait_with_output()
-        .context("failed to wait for pandoc")?;
-
-    let elapsed = elapsed_ms(&start);
-
-    if out.status.success() {
-        Ok(RenderResult {
-            input: "<stdin>".to_string(),
-            output: output.display().to_string(),
-            success: true,
-            time_ms: elapsed,
-            error: None,
-        })
-    } else {
-        let stderr = String::from_utf8_lossy(&out.stderr);
-        Ok(RenderResult {
+    match compile_to_pdf(&content, cli) {
+        Ok(pdf_bytes) => {
+            std::fs::write(output, &pdf_bytes)
+                .with_context(|| format!("failed to write {}", output.display()))?;
+            Ok(RenderResult {
+                input: "<stdin>".to_string(),
+                output: output.display().to_string(),
+                success: true,
+                time_ms: elapsed_ms(&start),
+                error: None,
+            })
+        }
+        Err(e) => Ok(RenderResult {
             input: "<stdin>".to_string(),
             output: output.display().to_string(),
             success: false,
-            time_ms: elapsed,
-            error: Some(stderr.to_string()),
-        })
+            time_ms: elapsed_ms(&start),
+            error: Some(e.to_string()),
+        }),
     }
 }
