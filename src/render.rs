@@ -100,7 +100,25 @@ fn build_inputs(content: &str, cli: &Cli) -> Dict {
     dict
 }
 
+/// Strip YAML front-matter (a `---`-delimited block at the start of the file).
+fn strip_front_matter(content: &str) -> &str {
+    let trimmed = content.trim_start();
+    if !trimmed.starts_with("---") {
+        return content;
+    }
+    // Find the closing `---` (must be on its own line after the opening)
+    let after_open = &trimmed[3..];
+    if let Some(close) = after_open.find("\n---") {
+        let rest = &after_open[close + 4..];
+        // Skip the newline after closing ---
+        rest.strip_prefix('\n').unwrap_or(rest)
+    } else {
+        content
+    }
+}
+
 fn compile_to_pdf(content: &str, cli: &Cli) -> Result<Vec<u8>> {
+    let content = strip_front_matter(content);
     let inputs = build_inputs(content, cli);
 
     // Read optional preamble
@@ -151,6 +169,7 @@ fn compile_to_pdf(content: &str, cli: &Cli) -> Result<Vec<u8>> {
 /// without invoking the Typst compiler.
 #[must_use]
 pub fn format_dry_run(content: &str, cli: &Cli) -> String {
+    let content = strip_front_matter(content);
     let mut parts = vec![String::from("// sys.inputs:")];
 
     let inputs_display: Vec<(&str, String)> = vec![
@@ -352,5 +371,39 @@ mod tests {
         let output = format_dry_run("test", &cli);
 
         assert!(output.contains("0.5in"));
+    }
+
+    #[test]
+    fn strip_front_matter_removes_yaml() {
+        let input = "---\ntitle: Hello\ndate: 2026\n---\n# Heading\n";
+        assert_eq!(strip_front_matter(input), "# Heading\n");
+    }
+
+    #[test]
+    fn strip_front_matter_no_front_matter() {
+        let input = "# Just a heading\nSome text.\n";
+        assert_eq!(strip_front_matter(input), input);
+    }
+
+    #[test]
+    fn strip_front_matter_unclosed() {
+        let input = "---\ntitle: Hello\n# No closing delimiter\n";
+        assert_eq!(strip_front_matter(input), input);
+    }
+
+    #[test]
+    fn strip_front_matter_hr_not_confused() {
+        // A `---` that isn't at the start shouldn't be stripped
+        let input = "# Title\n\n---\n\nSome text.\n";
+        assert_eq!(strip_front_matter(input), input);
+    }
+
+    #[test]
+    fn dry_run_strips_front_matter() {
+        let cli = default_cli();
+        let content = "---\ntitle: Test\n---\nHello world";
+        let output = format_dry_run(content, &cli);
+        // Size should reflect stripped content, not original
+        assert!(output.contains("<11 bytes>"));
     }
 }
