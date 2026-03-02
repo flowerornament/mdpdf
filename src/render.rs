@@ -146,6 +146,9 @@ fn compile_to_pdf(content: &str, cli: &Cli) -> Result<Vec<u8>> {
     Ok(pdf_bytes)
 }
 
+/// Return the Typst source that would be compiled, prefixed with a
+/// `sys.inputs` header. Used by `--dry-run` to inspect the template
+/// without invoking the Typst compiler.
 #[must_use]
 pub fn format_dry_run(content: &str, cli: &Cli) -> String {
     let mut parts = vec![String::from("// sys.inputs:")];
@@ -175,11 +178,14 @@ pub fn format_dry_run(content: &str, cli: &Cli) -> String {
     parts.join("\n")
 }
 
+/// Replace the input file's extension with `.pdf`.
 #[must_use]
 pub fn default_output_path(input: &Path) -> PathBuf {
     input.with_extension("pdf")
 }
 
+/// Read a single markdown file, compile it to PDF via Typst, and write
+/// the result. Returns a [`RenderResult`] (never panics).
 #[must_use]
 pub fn render_one(input: &Path, output: &Path, cli: &Cli) -> RenderResult {
     let start = Instant::now();

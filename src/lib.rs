@@ -1,3 +1,13 @@
+//! Markdown-to-PDF renderer powered by Typst.
+//!
+//! Reads `.md` files, pipes them through a Typst template with cmarker,
+//! and writes PDF output. Supports parallel multi-file rendering, stdin,
+//! dry-run mode, and JSONL output.
+//!
+//! - [`cli`] — command-line argument definitions
+//! - [`render`] — compilation and PDF export
+//! - [`report`] — structured render results
+
 pub mod cli;
 pub mod render;
 pub mod report;
@@ -11,12 +21,14 @@ use rayon::prelude::*;
 use cli::Cli;
 use render::{default_output_path, format_dry_run, render_one, render_stdin};
 
+/// Parse CLI arguments and render. Entry point for the binary.
 #[must_use]
 pub fn run() -> ExitCode {
     let cli = Cli::parse();
     run_with(&cli)
 }
 
+/// Render with a pre-built [`Cli`]. Testable entry point.
 #[must_use]
 pub fn run_with(cli: &Cli) -> ExitCode {
     // Stdin mode: no files given

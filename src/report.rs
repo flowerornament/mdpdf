@@ -1,5 +1,7 @@
 use serde::Serialize;
 
+/// Outcome of rendering a single file (or stdin). Serialises to JSONL
+/// for `--json` mode; also drives human-readable stderr output.
 #[derive(Debug, Serialize)]
 pub struct RenderResult {
     pub input: String,
@@ -11,6 +13,7 @@ pub struct RenderResult {
 }
 
 impl RenderResult {
+    /// Print a one-line summary to stderr (` ok:` or ` FAIL:`).
     pub fn print_human(&self) {
         if self.success {
             eprintln!("  ok: {} ({}ms)", self.output, self.time_ms);
@@ -24,6 +27,7 @@ impl RenderResult {
         }
     }
 
+    /// Serialise this result as a single JSON line to stdout.
     pub fn print_json(&self) {
         if let Ok(json) = serde_json::to_string(self) {
             println!("{json}");
