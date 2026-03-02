@@ -1,6 +1,6 @@
-mod cli;
-mod render;
-mod report;
+pub mod cli;
+pub mod render;
+pub mod report;
 
 use std::process::ExitCode;
 use std::sync::atomic::{AtomicBool, Ordering};

@@ -71,6 +71,7 @@ pub struct Cli {
 }
 
 impl Cli {
+    #[must_use]
     pub fn toc_enabled(&self) -> bool {
         if self.no_toc {
             return false;
@@ -78,10 +79,82 @@ impl Cli {
         self.toc
     }
 
+    #[must_use]
     pub fn number_sections_enabled(&self) -> bool {
         if self.no_number_sections {
             return false;
         }
         self.number_sections
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn default_cli() -> Cli {
+        Cli {
+            files: vec![],
+            output: None,
+            toc: true,
+            no_toc: false,
+            number_sections: true,
+            no_number_sections: false,
+            margin: "1in".to_string(),
+            font_size: "11pt".to_string(),
+            include_preamble: None,
+            json: false,
+            dry_run: false,
+            jobs: 8,
+        }
+    }
+
+    #[test]
+    fn toc_enabled_by_default() {
+        let cli = default_cli();
+        assert!(cli.toc_enabled());
+    }
+
+    #[test]
+    fn toc_disabled_by_no_toc() {
+        let mut cli = default_cli();
+        cli.no_toc = true;
+        assert!(!cli.toc_enabled());
+    }
+
+    #[test]
+    fn toc_disabled_when_toc_false() {
+        let mut cli = default_cli();
+        cli.toc = false;
+        assert!(!cli.toc_enabled());
+    }
+
+    #[test]
+    fn no_toc_overrides_toc_true() {
+        let mut cli = default_cli();
+        cli.toc = true;
+        cli.no_toc = true;
+        assert!(!cli.toc_enabled());
+    }
+
+    #[test]
+    fn number_sections_enabled_by_default() {
+        let cli = default_cli();
+        assert!(cli.number_sections_enabled());
+    }
+
+    #[test]
+    fn number_sections_disabled_by_no_flag() {
+        let mut cli = default_cli();
+        cli.no_number_sections = true;
+        assert!(!cli.number_sections_enabled());
+    }
+
+    #[test]
+    fn no_number_sections_overrides_true() {
+        let mut cli = default_cli();
+        cli.number_sections = true;
+        cli.no_number_sections = true;
+        assert!(!cli.number_sections_enabled());
     }
 }

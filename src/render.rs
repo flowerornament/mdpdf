@@ -146,6 +146,7 @@ fn compile_to_pdf(content: &str, cli: &Cli) -> Result<Vec<u8>> {
     Ok(pdf_bytes)
 }
 
+#[must_use]
 pub fn format_dry_run(content: &str, cli: &Cli) -> String {
     let mut parts = vec![String::from("// sys.inputs:")];
 
@@ -174,10 +175,12 @@ pub fn format_dry_run(content: &str, cli: &Cli) -> String {
     parts.join("\n")
 }
 
+#[must_use]
 pub fn default_output_path(input: &Path) -> PathBuf {
     input.with_extension("pdf")
 }
 
+#[must_use]
 pub fn render_one(input: &Path, output: &Path, cli: &Cli) -> RenderResult {
     let start = Instant::now();
 
@@ -223,6 +226,8 @@ pub fn render_one(input: &Path, output: &Path, cli: &Cli) -> RenderResult {
     }
 }
 
+/// # Errors
+/// Returns an error if stdin cannot be read or is empty.
 pub fn render_stdin(output: &Path, cli: &Cli) -> Result<RenderResult> {
     let start = Instant::now();
 
@@ -254,5 +259,92 @@ pub fn render_stdin(output: &Path, cli: &Cli) -> Result<RenderResult> {
             time_ms: elapsed_ms(&start),
             error: Some(e.to_string()),
         }),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    fn default_cli() -> Cli {
+        Cli {
+            files: vec![],
+            output: None,
+            toc: true,
+            no_toc: false,
+            number_sections: true,
+            no_number_sections: false,
+            margin: "1in".to_string(),
+            font_size: "11pt".to_string(),
+            include_preamble: None,
+            json: false,
+            dry_run: false,
+            jobs: 8,
+        }
+    }
+
+    #[test]
+    fn default_output_path_md_to_pdf() {
+        assert_eq!(
+            default_output_path(Path::new("doc.md")),
+            PathBuf::from("doc.pdf")
+        );
+    }
+
+    #[test]
+    fn default_output_path_nested() {
+        assert_eq!(
+            default_output_path(Path::new("/tmp/foo/bar.md")),
+            PathBuf::from("/tmp/foo/bar.pdf")
+        );
+    }
+
+    #[test]
+    fn default_output_path_no_extension() {
+        assert_eq!(
+            default_output_path(Path::new("README")),
+            PathBuf::from("README.pdf")
+        );
+    }
+
+    #[test]
+    fn dry_run_contains_sys_inputs() {
+        let cli = default_cli();
+        let output = format_dry_run("hello world", &cli);
+
+        assert!(output.contains("// sys.inputs:"));
+        assert!(output.contains("content"));
+        assert!(output.contains("font-size"));
+        assert!(output.contains("margin"));
+        assert!(output.contains("toc"));
+        assert!(output.contains("number-sections"));
+    }
+
+    #[test]
+    fn dry_run_contains_template() {
+        let cli = default_cli();
+        let output = format_dry_run("test", &cli);
+
+        assert!(output.contains("cmarker"));
+        assert!(output.contains("mitex"));
+    }
+
+    #[test]
+    fn dry_run_shows_content_size() {
+        let cli = default_cli();
+        let content = "x".repeat(42);
+        let output = format_dry_run(&content, &cli);
+
+        assert!(output.contains("<42 bytes>"));
+    }
+
+    #[test]
+    fn dry_run_custom_margin() {
+        let mut cli = default_cli();
+        cli.margin = "0.5in".to_string();
+        let output = format_dry_run("test", &cli);
+
+        assert!(output.contains("0.5in"));
     }
 }
