@@ -1,0 +1,56 @@
+Contents
+1 Heading Level 1
+1.1 Heading Level 2 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+1.1.1 Heading Level 3 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+1.2 Another Section . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+1.2.1 Subsection A . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+1.2.2 Subsection B . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+1
+
+Heading Level 1
+
+1.1
+
+Heading Level 2
+
+1.1.1
+
+Heading Level 3
+
+1.1.1.1
+
+Heading Level 4
+
+1.1.1.1.1
+
+1.2
+
+Heading Level 5
+
+Heading Level 6
+
+Another Section
+
+Content under another top-level section.
+1.2.1
+
+Subsection A
+
+Text here.
+1.2.2
+
+Subsection B
+
+Text here too.
+
+1
+
+1
+1
+1
+1
+1
+1
+
+

@@ -1,0 +1,40 @@
+Contents
+1 Math Rendering
+
+1
+
+1
+
+Math Rendering
+
+Inline math: 𝑥2 + 𝑦2 = 𝑧 2
+Display math:
+𝐸 = 𝑚𝑐2
+∞
+
+∫
+
+−𝑥2
+
+𝑒
+
+0
+
+√
+𝜋
+𝑑𝑥 =
+2
+
+A more complex expression:
+∞
+
+𝑥𝑛
+= 𝑒𝑥
+𝑛!
+𝑛=0
+
+∑
+
+1
+
+

@@ -1,0 +1,74 @@
+Contents
+1 Tables
+1.1 Simple Table . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+1.2 Wide Table . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+1.3 Alignment . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+1
+
+Tables
+
+1.1
+
+Simple Table
+Name
+
+Type Default
+
+margin string 1in
+font-size string 11pt
+toc
+bool true
+
+1.2
+
+Wide Table
+Column A Column B Column C Column D Column E Column F
+alpha
+one
+foo
+
+1.3
+
+beta
+two
+bar
+
+gamma
+three
+baz
+
+delta
+four
+qux
+
+epsilon
+five
+quux
+
+Alignment
+Left
+
+Center
+
+Right
+
+a
+b
+longer text centered
+
+c
+42
+
+1
+
+zeta
+six
+corge
+
+1
+1
+1
+1
+
+
