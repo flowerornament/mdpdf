@@ -5,6 +5,7 @@ edition = "2024"
 publish = false
 license = "MIT"
 description = "Markdown-to-PDF transducer with built-in unicode math support"
+repository = "https://github.com/flowerornament/mdpdf"
 
 [[bin]]
 name = "mdpdf"

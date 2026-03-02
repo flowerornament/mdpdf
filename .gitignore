@@ -2,3 +2,4 @@
 *.pdf
 !tests/references/pandoc/*.pdf
 tests/output/
+/result
