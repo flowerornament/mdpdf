@@ -51,8 +51,9 @@ impl RenderResult {
 
     /// Serialise this result as a single JSON line to stdout.
     pub fn print_json(&self) {
-        if let Ok(json) = serde_json::to_string(self) {
-            println!("{json}");
+        match serde_json::to_string(self) {
+            Ok(json) => println!("{json}"),
+            Err(e) => eprintln!("error: failed to serialize result: {e}"),
         }
     }
 }

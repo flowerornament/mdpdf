@@ -12,10 +12,10 @@ pub mod cli;
 pub mod render;
 pub mod report;
 
+use std::io::IsTerminal;
 use std::process::ExitCode;
-use std::sync::atomic::{AtomicBool, Ordering};
 
-use clap::Parser;
+use clap::{CommandFactory, Parser};
 use rayon::prelude::*;
 
 use cli::Cli;
@@ -33,7 +33,11 @@ pub fn run() -> ExitCode {
 pub fn run_with(cli: &Cli) -> ExitCode {
     // Stdin mode: no files given
     if cli.files.is_empty() {
-        return run_stdin(cli);
+        if std::io::stdin().is_terminal() {
+            Cli::command().print_help().ok();
+            return ExitCode::SUCCESS;
+        }
+        return run_stdin_mode(cli);
     }
 
     // Validate: -o only valid with single file
@@ -83,7 +87,7 @@ pub fn run_with(cli: &Cli) -> ExitCode {
         };
     }
 
-    // Multi-file parallel
+    // Multi-file parallel: collect results, then print sequentially
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(cli.jobs)
         .build();
@@ -96,43 +100,41 @@ pub fn run_with(cli: &Cli) -> ExitCode {
         }
     };
 
-    let any_failed = AtomicBool::new(false);
-
-    pool.install(|| {
-        cli.files.par_iter().for_each(|input| {
-            let output = default_output_path(input);
-            let result = render_one(input, &output, cli);
-
-            if !result.success {
-                any_failed.store(true, Ordering::Relaxed);
-            }
-
-            if cli.json {
-                result.print_json();
-            } else {
-                result.print_human();
-            }
-        });
+    let results: Vec<_> = pool.install(|| {
+        cli.files
+            .par_iter()
+            .map(|input| {
+                let output = default_output_path(input);
+                render_one(input, &output, cli)
+            })
+            .collect()
     });
 
-    if !cli.json {
-        let total = cli.files.len();
-        let failed = if any_failed.load(Ordering::Relaxed) {
-            "some"
+    let mut fail_count = 0usize;
+    for result in &results {
+        if !result.success {
+            fail_count += 1;
+        }
+        if cli.json {
+            result.print_json();
         } else {
-            "0"
-        };
-        eprintln!("\nRendered {total} files ({failed} failures)");
+            result.print_human();
+        }
     }
 
-    if any_failed.load(Ordering::Relaxed) {
+    if !cli.json {
+        let total = results.len();
+        eprintln!("\nRendered {total} files ({fail_count} failures)");
+    }
+
+    if fail_count > 0 {
         ExitCode::from(1)
     } else {
         ExitCode::SUCCESS
     }
 }
 
-fn run_stdin(cli: &Cli) -> ExitCode {
+fn run_stdin_mode(cli: &Cli) -> ExitCode {
     let Some(output) = cli.output.clone() else {
         eprintln!("error: --output is required when reading from stdin");
         return ExitCode::from(1);
@@ -144,22 +146,17 @@ fn run_stdin(cli: &Cli) -> ExitCode {
         return ExitCode::SUCCESS;
     }
 
-    match render_stdin(&output, cli) {
-        Ok(result) => {
-            if cli.json {
-                result.print_json();
-            } else {
-                result.print_human();
-            }
-            if result.success {
-                ExitCode::SUCCESS
-            } else {
-                ExitCode::from(1)
-            }
-        }
-        Err(e) => {
-            eprintln!("error: {e}");
-            ExitCode::from(1)
-        }
+    let result = render_stdin(&output, cli);
+
+    if cli.json {
+        result.print_json();
+    } else {
+        result.print_human();
+    }
+
+    if result.success {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::from(1)
     }
 }

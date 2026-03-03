@@ -92,8 +92,8 @@ Rendered 5 files (1 failures)
 
 | Flag | Default | Rationale |
 |------|---------|-----------|
-| `--toc` | on | Technical docs benefit from TOC |
-| `--number-sections` | on | Cross-referencing needs section numbers |
+| `--toc` | off | Opt-in; technical docs benefit from TOC |
+| `--number-sections` | off | Opt-in; cross-referencing needs section numbers |
 | `--margin 1in` | `1in` | Standard readable margin |
 | `--font-size 11pt` | `11pt` | Slightly larger than default for readability |
 | `--include-preamble FILE` | none | Escape hatch for custom typst code |

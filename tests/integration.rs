@@ -9,22 +9,6 @@ fn fixture(name: &str) -> std::path::PathBuf {
         .join(name)
 }
 
-fn default_cli() -> Cli {
-    Cli {
-        files: vec![],
-        output: None,
-        toc: false,
-        number_sections: false,
-        margin: "1in".to_string(),
-        font_size: "11pt".to_string(),
-        include_preamble: None,
-        json: false,
-        dry_run: false,
-        verbose: false,
-        jobs: 8,
-    }
-}
-
 fn render_fixture(name: &str, cli: &Cli) -> mdpdf::report::RenderResult {
     let input = fixture(name);
     let dir = tempfile::tempdir().expect("tempdir");
@@ -43,43 +27,43 @@ fn render_fixture(name: &str, cli: &Cli) -> mdpdf::report::RenderResult {
 
 #[test]
 fn render_basic() {
-    let result = render_fixture("basic.md", &default_cli());
+    let result = render_fixture("basic.md", &Cli::default());
     assert!(result.success, "basic.md: {:?}", result.error);
 }
 
 #[test]
 fn render_math() {
-    let result = render_fixture("math.md", &default_cli());
+    let result = render_fixture("math.md", &Cli::default());
     assert!(result.success, "math.md: {:?}", result.error);
 }
 
 #[test]
 fn render_unicode() {
-    let result = render_fixture("unicode.md", &default_cli());
+    let result = render_fixture("unicode.md", &Cli::default());
     assert!(result.success, "unicode.md: {:?}", result.error);
 }
 
 #[test]
 fn render_tables() {
-    let result = render_fixture("tables.md", &default_cli());
+    let result = render_fixture("tables.md", &Cli::default());
     assert!(result.success, "tables.md: {:?}", result.error);
 }
 
 #[test]
 fn render_code() {
-    let result = render_fixture("code.md", &default_cli());
+    let result = render_fixture("code.md", &Cli::default());
     assert!(result.success, "code.md: {:?}", result.error);
 }
 
 #[test]
 fn render_headings() {
-    let result = render_fixture("headings.md", &default_cli());
+    let result = render_fixture("headings.md", &Cli::default());
     assert!(result.success, "headings.md: {:?}", result.error);
 }
 
 #[test]
 fn render_long() {
-    let result = render_fixture("long.md", &default_cli());
+    let result = render_fixture("long.md", &Cli::default());
     assert!(result.success, "long.md: {:?}", result.error);
 }
 
@@ -92,14 +76,16 @@ fn toc_produces_larger_output() {
 
     // Without TOC (default)
     let out_no_toc = dir.path().join("no_toc.pdf");
-    let cli_no_toc = default_cli();
+    let cli_no_toc = Cli::default();
     let r1 = render_one(&input, &out_no_toc, &cli_no_toc);
     assert!(r1.success, "no toc: {:?}", r1.error);
 
     // With TOC
     let out_toc = dir.path().join("with_toc.pdf");
-    let mut cli_toc = default_cli();
-    cli_toc.toc = true;
+    let cli_toc = Cli {
+        toc: true,
+        ..Cli::default()
+    };
     let r2 = render_one(&input, &out_toc, &cli_toc);
     assert!(r2.success, "with toc: {:?}", r2.error);
 
@@ -113,16 +99,20 @@ fn toc_produces_larger_output() {
 
 #[test]
 fn custom_margin_renders() {
-    let mut cli = default_cli();
-    cli.margin = "0.5in".to_string();
+    let cli = Cli {
+        margin: "0.5in".to_string(),
+        ..Cli::default()
+    };
     let result = render_fixture("basic.md", &cli);
     assert!(result.success, "custom margin: {:?}", result.error);
 }
 
 #[test]
 fn custom_font_size_renders() {
-    let mut cli = default_cli();
-    cli.font_size = "14pt".to_string();
+    let cli = Cli {
+        font_size: "14pt".to_string(),
+        ..Cli::default()
+    };
     let result = render_fixture("basic.md", &cli);
     assert!(result.success, "custom font size: {:?}", result.error);
 }
@@ -131,7 +121,7 @@ fn custom_font_size_renders() {
 
 #[test]
 fn missing_file_returns_failure() {
-    let cli = default_cli();
+    let cli = Cli::default();
     let input = Path::new("/nonexistent/file.md");
     let dir = tempfile::tempdir().expect("tempdir");
     let output = dir.path().join("out.pdf");
@@ -144,7 +134,7 @@ fn missing_file_returns_failure() {
 
 #[test]
 fn dry_run_output_contains_template() {
-    let cli = default_cli();
+    let cli = Cli::default();
     let content = std::fs::read_to_string(fixture("basic.md")).expect("read fixture");
     let output = format_dry_run(&content, &cli);
     assert!(output.contains("cmarker"));
@@ -155,7 +145,7 @@ fn dry_run_output_contains_template() {
 
 #[test]
 fn render_result_json_roundtrip() {
-    let result = render_fixture("basic.md", &default_cli());
+    let result = render_fixture("basic.md", &Cli::default());
     let json = serde_json::to_string(&result).expect("serialize");
     let parsed: serde_json::Value = serde_json::from_str(&json).expect("parse");
     assert_eq!(parsed["success"], true);

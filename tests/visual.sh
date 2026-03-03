@@ -41,7 +41,7 @@ for md in "$FIXTURES"/*.md; do
 
     # Typst render
     typst_pdf="$OUTPUT/typst/$name.pdf"
-    "$MDPDF" "$md" -o "$typst_pdf" --no-toc --no-number-sections 2>/dev/null || {
+    "$MDPDF" "$md" -o "$typst_pdf" 2>/dev/null || {
         echo "  WARN: mdpdf failed for $name"
         continue
     }

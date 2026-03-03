@@ -7,11 +7,12 @@
 #show math.equation: set text(font: "New Computer Modern Math")
 #show raw: set text(font: "DejaVu Sans Mono")
 
-#if sys.inputs.at("number-sections", default: "true") == "true" {
+// Defaults below match CLI defaults; build_inputs always provides these keys.
+#if sys.inputs.at("number-sections", default: "false") == "true" {
   set heading(numbering: "1.1")
 }
 
-#if sys.inputs.at("toc", default: "true") == "true" {
+#if sys.inputs.at("toc", default: "false") == "true" {
   outline(title: "Contents", depth: 3)
   pagebreak(weak: true)
 }

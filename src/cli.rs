@@ -66,12 +66,9 @@ pub struct Cli {
     pub jobs: usize,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn default_cli() -> Cli {
-        Cli {
+impl Default for Cli {
+    fn default() -> Self {
+        Self {
             files: vec![],
             output: None,
             toc: false,
@@ -85,30 +82,49 @@ mod tests {
             jobs: 8,
         }
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
 
     #[test]
-    fn toc_disabled_by_default() {
-        let cli = default_cli();
+    fn default_values() {
+        let cli = Cli::try_parse_from(["mdpdf", "file.md"]).unwrap();
         assert!(!cli.toc);
+        assert!(!cli.number_sections);
+        assert_eq!(cli.margin, "1in");
+        assert_eq!(cli.font_size, "11pt");
+        assert_eq!(cli.jobs, 8);
     }
 
     #[test]
-    fn toc_enabled_by_flag() {
-        let mut cli = default_cli();
-        cli.toc = true;
+    fn toc_flag() {
+        let cli = Cli::try_parse_from(["mdpdf", "--toc", "file.md"]).unwrap();
         assert!(cli.toc);
     }
 
     #[test]
-    fn number_sections_disabled_by_default() {
-        let cli = default_cli();
-        assert!(!cli.number_sections);
+    fn number_sections_flag() {
+        let cli = Cli::try_parse_from(["mdpdf", "--number-sections", "file.md"]).unwrap();
+        assert!(cli.number_sections);
     }
 
     #[test]
-    fn number_sections_enabled_by_flag() {
-        let mut cli = default_cli();
-        cli.number_sections = true;
-        assert!(cli.number_sections);
+    fn custom_margin() {
+        let cli = Cli::try_parse_from(["mdpdf", "--margin", "0.5in", "file.md"]).unwrap();
+        assert_eq!(cli.margin, "0.5in");
+    }
+
+    #[test]
+    fn output_flag() {
+        let cli = Cli::try_parse_from(["mdpdf", "-o", "out.pdf", "file.md"]).unwrap();
+        assert_eq!(cli.output, Some(PathBuf::from("out.pdf")));
+    }
+
+    #[test]
+    fn multiple_files() {
+        let cli = Cli::try_parse_from(["mdpdf", "a.md", "b.md", "c.md"]).unwrap();
+        assert_eq!(cli.files.len(), 3);
     }
 }

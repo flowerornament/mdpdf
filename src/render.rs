@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 use std::time::Instant;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use typst::diag::{FileError, FileResult};
 use typst::foundations::{Bytes, Dict, IntoValue};
 use typst::layout::PagedDocument;
@@ -44,15 +44,16 @@ impl EmbeddedPackageResolver {
         let mut binaries = HashMap::new();
 
         for pkg in packages {
-            if let Ok(files) = pkg.read_archive() {
-                for file in files {
-                    match file {
-                        tep::File::Source(source) => {
-                            sources.insert(source.id(), source);
-                        }
-                        tep::File::File(id, bytes) => {
-                            binaries.insert(id, bytes);
-                        }
+            let files = pkg
+                .read_archive()
+                .expect("embedded package archive should be readable");
+            for file in files {
+                match file {
+                    tep::File::Source(source) => {
+                        sources.insert(source.id(), source);
+                    }
+                    tep::File::File(id, bytes) => {
+                        binaries.insert(id, bytes);
                     }
                 }
             }
@@ -94,14 +95,11 @@ fn build_inputs(content: &str, cli: &Cli) -> Dict {
 /// Strip YAML front-matter (a `---`-delimited block at the start of the file).
 fn strip_front_matter(content: &str) -> &str {
     let trimmed = content.trim_start();
-    if !trimmed.starts_with("---") {
+    let Some(after_open) = trimmed.strip_prefix("---") else {
         return content;
-    }
+    };
     // Find the closing `---` (must be on its own line after the opening)
-    let after_open = &trimmed[3..];
-    if let Some(close) = after_open.find("\n---") {
-        let rest = &after_open[close + 4..];
-        // Skip the newline after closing ---
+    if let Some((_, rest)) = after_open.split_once("\n---") {
         rest.strip_prefix('\n').unwrap_or(rest)
     } else {
         content
@@ -236,29 +234,32 @@ pub fn render_one(input: &Path, output: &Path, cli: &Cli) -> RenderResult {
     }
 }
 
-/// # Errors
-/// Returns an error if stdin cannot be read or is empty.
-pub fn render_stdin(output: &Path, cli: &Cli) -> Result<RenderResult> {
+/// Read markdown from stdin, compile to PDF, and write the result.
+/// Returns a [`RenderResult`] (never panics), matching [`render_one`].
+#[must_use]
+pub fn render_stdin(output: &Path, cli: &Cli) -> RenderResult {
     let start = Instant::now();
     let out = output.display().to_string();
     let r = RenderResult::builder("<stdin>", &out, &start);
 
     let mut content = String::new();
-    io::stdin()
-        .read_to_string(&mut content)
-        .context("failed to read stdin")?;
+    if let Err(e) = io::stdin().read_to_string(&mut content) {
+        return r.fail(&format!("failed to read stdin: {e}"));
+    }
 
     if content.is_empty() {
-        bail!("no input on stdin");
+        return r.fail(&"no input on stdin");
     }
 
     match compile_to_pdf(&content, cli) {
         Ok(compiled) => {
-            std::fs::write(output, &compiled.pdf)
-                .with_context(|| format!("failed to write {}", output.display()))?;
-            Ok(r.warnings(compiled.warnings).ok())
+            let r = r.warnings(compiled.warnings);
+            if let Err(e) = std::fs::write(output, &compiled.pdf) {
+                return r.fail(&format!("failed to write {}: {e}", output.display()));
+            }
+            r.ok()
         }
-        Err(e) => Ok(r.fail(&e)),
+        Err(e) => r.fail(&e),
     }
 }
 
@@ -266,22 +267,6 @@ pub fn render_stdin(output: &Path, cli: &Cli) -> Result<RenderResult> {
 mod tests {
     use super::*;
     use std::path::Path;
-
-    fn default_cli() -> Cli {
-        Cli {
-            files: vec![],
-            output: None,
-            toc: false,
-            number_sections: false,
-            margin: "1in".to_string(),
-            font_size: "11pt".to_string(),
-            include_preamble: None,
-            json: false,
-            dry_run: false,
-            verbose: false,
-            jobs: 8,
-        }
-    }
 
     #[test]
     fn default_output_path_md_to_pdf() {
@@ -309,7 +294,7 @@ mod tests {
 
     #[test]
     fn dry_run_contains_sys_inputs() {
-        let cli = default_cli();
+        let cli = Cli::default();
         let output = format_dry_run("hello world", &cli);
 
         assert!(output.contains("// sys.inputs:"));
@@ -322,7 +307,7 @@ mod tests {
 
     #[test]
     fn dry_run_contains_template() {
-        let cli = default_cli();
+        let cli = Cli::default();
         let output = format_dry_run("test", &cli);
 
         assert!(output.contains("cmarker"));
@@ -331,7 +316,7 @@ mod tests {
 
     #[test]
     fn dry_run_shows_content_size() {
-        let cli = default_cli();
+        let cli = Cli::default();
         let content = "x".repeat(42);
         let output = format_dry_run(&content, &cli);
 
@@ -340,8 +325,10 @@ mod tests {
 
     #[test]
     fn dry_run_custom_margin() {
-        let mut cli = default_cli();
-        cli.margin = "0.5in".to_string();
+        let cli = Cli {
+            margin: "0.5in".to_string(),
+            ..Cli::default()
+        };
         let output = format_dry_run("test", &cli);
 
         assert!(output.contains("0.5in"));
@@ -374,7 +361,7 @@ mod tests {
 
     #[test]
     fn dry_run_strips_front_matter() {
-        let cli = default_cli();
+        let cli = Cli::default();
         let content = "---\ntitle: Test\n---\nHello world";
         let output = format_dry_run(content, &cli);
         // Size should reflect stripped content, not original

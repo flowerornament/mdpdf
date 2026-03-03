@@ -22,22 +22,6 @@ fn reference_text(name: &str) -> std::path::PathBuf {
         .join(format!("{stem}.txt"))
 }
 
-fn default_cli() -> Cli {
-    Cli {
-        files: vec![],
-        output: None,
-        toc: false,
-        number_sections: false,
-        margin: "1in".to_string(),
-        font_size: "11pt".to_string(),
-        include_preamble: None,
-        json: false,
-        dry_run: false,
-        verbose: false,
-        jobs: 8,
-    }
-}
-
 fn has_pdftotext() -> bool {
     Command::new("pdftotext").arg("-v").output().is_ok()
 }
@@ -77,7 +61,7 @@ fn compare_fixture(name: &str) {
     let input = fixture(name);
     let dir = tempfile::tempdir().expect("tempdir");
     let output = dir.path().join(default_output_path(Path::new(name)));
-    let cli = default_cli();
+    let cli = Cli::default();
     let result = render_one(&input, &output, &cli);
     assert!(result.success, "{name}: {:?}", result.error);
 
