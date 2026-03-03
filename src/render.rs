@@ -78,10 +78,6 @@ impl FileResolver for EmbeddedPackageResolver {
     }
 }
 
-fn elapsed_ms(start: &Instant) -> u64 {
-    u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX)
-}
-
 fn build_inputs(content: &str, cli: &Cli) -> Dict {
     let mut dict = Dict::new();
     dict.insert("content".into(), content.into_value());
@@ -112,7 +108,12 @@ fn strip_front_matter(content: &str) -> &str {
     }
 }
 
-fn compile_to_pdf(content: &str, cli: &Cli) -> Result<Vec<u8>> {
+struct CompileOutput {
+    pdf: Vec<u8>,
+    warnings: Vec<String>,
+}
+
+fn compile_to_pdf(content: &str, cli: &Cli) -> Result<CompileOutput> {
     let content = strip_front_matter(content);
     let inputs = build_inputs(content, cli);
 
@@ -141,11 +142,15 @@ fn compile_to_pdf(content: &str, cli: &Cli) -> Result<Vec<u8>> {
     // Compile with inputs
     let compiled = engine.compile_with_input(inputs);
 
-    if cli.verbose {
-        for warning in &compiled.warnings {
-            eprintln!("  warning: {}", warning.message);
-        }
-    }
+    let warnings: Vec<String> = if cli.verbose {
+        compiled
+            .warnings
+            .iter()
+            .map(|w| w.message.to_string())
+            .collect()
+    } else {
+        Vec::new()
+    };
 
     let document: PagedDocument = compiled
         .output
@@ -160,7 +165,10 @@ fn compile_to_pdf(content: &str, cli: &Cli) -> Result<Vec<u8>> {
         anyhow::anyhow!("{msg}")
     })?;
 
-    Ok(pdf_bytes)
+    Ok(CompileOutput {
+        pdf: pdf_bytes,
+        warnings,
+    })
 }
 
 /// Return the Typst source that would be compiled, prefixed with a
@@ -207,46 +215,24 @@ pub fn default_output_path(input: &Path) -> PathBuf {
 #[must_use]
 pub fn render_one(input: &Path, output: &Path, cli: &Cli) -> RenderResult {
     let start = Instant::now();
+    let inp = input.display().to_string();
+    let out = output.display().to_string();
+    let r = RenderResult::builder(&inp, &out, &start);
 
     let content = match std::fs::read_to_string(input) {
         Ok(c) => c,
-        Err(e) => {
-            return RenderResult {
-                input: input.display().to_string(),
-                output: output.display().to_string(),
-                success: false,
-                time_ms: elapsed_ms(&start),
-                error: Some(format!("failed to read {}: {e}", input.display())),
-            };
-        }
+        Err(e) => return r.fail(&format!("failed to read {}: {e}", input.display())),
     };
 
     match compile_to_pdf(&content, cli) {
-        Ok(pdf_bytes) => {
-            if let Err(e) = std::fs::write(output, &pdf_bytes) {
-                return RenderResult {
-                    input: input.display().to_string(),
-                    output: output.display().to_string(),
-                    success: false,
-                    time_ms: elapsed_ms(&start),
-                    error: Some(format!("failed to write {}: {e}", output.display())),
-                };
+        Ok(compiled) => {
+            let r = r.warnings(compiled.warnings);
+            if let Err(e) = std::fs::write(output, &compiled.pdf) {
+                return r.fail(&format!("failed to write {}: {e}", output.display()));
             }
-            RenderResult {
-                input: input.display().to_string(),
-                output: output.display().to_string(),
-                success: true,
-                time_ms: elapsed_ms(&start),
-                error: None,
-            }
+            r.ok()
         }
-        Err(e) => RenderResult {
-            input: input.display().to_string(),
-            output: output.display().to_string(),
-            success: false,
-            time_ms: elapsed_ms(&start),
-            error: Some(e.to_string()),
-        },
+        Err(e) => r.fail(&e),
     }
 }
 
@@ -254,6 +240,8 @@ pub fn render_one(input: &Path, output: &Path, cli: &Cli) -> RenderResult {
 /// Returns an error if stdin cannot be read or is empty.
 pub fn render_stdin(output: &Path, cli: &Cli) -> Result<RenderResult> {
     let start = Instant::now();
+    let out = output.display().to_string();
+    let r = RenderResult::builder("<stdin>", &out, &start);
 
     let mut content = String::new();
     io::stdin()
@@ -265,24 +253,12 @@ pub fn render_stdin(output: &Path, cli: &Cli) -> Result<RenderResult> {
     }
 
     match compile_to_pdf(&content, cli) {
-        Ok(pdf_bytes) => {
-            std::fs::write(output, &pdf_bytes)
+        Ok(compiled) => {
+            std::fs::write(output, &compiled.pdf)
                 .with_context(|| format!("failed to write {}", output.display()))?;
-            Ok(RenderResult {
-                input: "<stdin>".to_string(),
-                output: output.display().to_string(),
-                success: true,
-                time_ms: elapsed_ms(&start),
-                error: None,
-            })
+            Ok(r.warnings(compiled.warnings).ok())
         }
-        Err(e) => Ok(RenderResult {
-            input: "<stdin>".to_string(),
-            output: output.display().to_string(),
-            success: false,
-            time_ms: elapsed_ms(&start),
-            error: Some(e.to_string()),
-        }),
+        Err(e) => Ok(r.fail(&e)),
     }
 }
 
