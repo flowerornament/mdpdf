@@ -141,6 +141,12 @@ fn compile_to_pdf(content: &str, cli: &Cli) -> Result<Vec<u8>> {
     // Compile with inputs
     let compiled = engine.compile_with_input(inputs);
 
+    if cli.verbose {
+        for warning in &compiled.warnings {
+            eprintln!("  warning: {}", warning.message);
+        }
+    }
+
     let document: PagedDocument = compiled
         .output
         .map_err(|e| anyhow::anyhow!("typst compilation failed:\n  {e}"))?;
@@ -296,6 +302,7 @@ mod tests {
             include_preamble: None,
             json: false,
             dry_run: false,
+            verbose: false,
             jobs: 8,
         }
     }

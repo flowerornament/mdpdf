@@ -57,6 +57,10 @@ pub struct Cli {
     #[arg(long)]
     pub dry_run: bool,
 
+    /// Show typst warnings during compilation.
+    #[arg(long, short = 'v')]
+    pub verbose: bool,
+
     /// Maximum number of parallel render jobs.
     #[arg(long, short = 'J', default_value = "8")]
     pub jobs: usize,
@@ -77,6 +81,7 @@ mod tests {
             include_preamble: None,
             json: false,
             dry_run: false,
+            verbose: false,
             jobs: 8,
         }
     }

@@ -33,6 +33,7 @@ fn default_cli() -> Cli {
         include_preamble: None,
         json: false,
         dry_run: false,
+        verbose: false,
         jobs: 8,
     }
 }
