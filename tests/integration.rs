@@ -13,10 +13,8 @@ fn default_cli() -> Cli {
     Cli {
         files: vec![],
         output: None,
-        toc: true,
-        no_toc: false,
-        number_sections: true,
-        no_number_sections: false,
+        toc: false,
+        number_sections: false,
         margin: "1in".to_string(),
         font_size: "11pt".to_string(),
         include_preamble: None,
@@ -87,28 +85,28 @@ fn render_long() {
 // --- Feature tests ---
 
 #[test]
-fn no_toc_produces_smaller_output() {
+fn toc_produces_larger_output() {
     let input = fixture("long.md");
     let dir = tempfile::tempdir().expect("tempdir");
 
+    // Without TOC (default)
+    let out_no_toc = dir.path().join("no_toc.pdf");
+    let cli_no_toc = default_cli();
+    let r1 = render_one(&input, &out_no_toc, &cli_no_toc);
+    assert!(r1.success, "no toc: {:?}", r1.error);
+
     // With TOC
     let out_toc = dir.path().join("with_toc.pdf");
-    let cli_toc = default_cli();
-    let r1 = render_one(&input, &out_toc, &cli_toc);
-    assert!(r1.success, "with toc: {:?}", r1.error);
+    let mut cli_toc = default_cli();
+    cli_toc.toc = true;
+    let r2 = render_one(&input, &out_toc, &cli_toc);
+    assert!(r2.success, "with toc: {:?}", r2.error);
 
-    // Without TOC
-    let out_no_toc = dir.path().join("no_toc.pdf");
-    let mut cli_no_toc = default_cli();
-    cli_no_toc.no_toc = true;
-    let r2 = render_one(&input, &out_no_toc, &cli_no_toc);
-    assert!(r2.success, "no toc: {:?}", r2.error);
-
-    let size_toc = std::fs::metadata(&out_toc).unwrap().len();
     let size_no_toc = std::fs::metadata(&out_no_toc).unwrap().len();
+    let size_toc = std::fs::metadata(&out_toc).unwrap().len();
     assert!(
-        size_no_toc < size_toc,
-        "no-toc PDF ({size_no_toc}) should be smaller than toc PDF ({size_toc})"
+        size_toc > size_no_toc,
+        "toc PDF ({size_toc}) should be larger than no-toc PDF ({size_no_toc})"
     );
 }
 

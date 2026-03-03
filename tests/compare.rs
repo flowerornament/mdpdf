@@ -26,10 +26,8 @@ fn default_cli() -> Cli {
     Cli {
         files: vec![],
         output: None,
-        toc: true,
-        no_toc: false,
-        number_sections: true,
-        no_number_sections: false,
+        toc: false,
+        number_sections: false,
         margin: "1in".to_string(),
         font_size: "11pt".to_string(),
         include_preamble: None,

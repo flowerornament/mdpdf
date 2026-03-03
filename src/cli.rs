@@ -18,7 +18,7 @@ EXAMPLES:
     mdpdf *.md --json               Batch convert with JSONL output
     cat doc.md | mdpdf -o doc.pdf   Convert from stdin
     mdpdf doc.md --dry-run          Print generated typst source
-    mdpdf doc.md --no-toc           Skip table of contents generation
+    mdpdf doc.md --toc              Include table of contents
     mdpdf doc.md --margin 0.75in    Custom margins")]
 pub struct Cli {
     /// Markdown files to convert. Reads from stdin if none given.
@@ -30,20 +30,12 @@ pub struct Cli {
     pub output: Option<PathBuf>,
 
     /// Generate table of contents.
-    #[arg(long, default_value_t = true, action = clap::ArgAction::Set)]
+    #[arg(long)]
     pub toc: bool,
 
-    /// Disable table of contents.
-    #[arg(long)]
-    pub no_toc: bool,
-
     /// Number document sections.
-    #[arg(long, default_value_t = true, action = clap::ArgAction::Set)]
-    pub number_sections: bool,
-
-    /// Disable section numbering.
     #[arg(long)]
-    pub no_number_sections: bool,
+    pub number_sections: bool,
 
     /// Page margin (e.g. 1in, 0.75in, 2cm).
     #[arg(long, default_value = "1in")]
@@ -70,24 +62,6 @@ pub struct Cli {
     pub jobs: usize,
 }
 
-impl Cli {
-    #[must_use]
-    pub fn toc_enabled(&self) -> bool {
-        if self.no_toc {
-            return false;
-        }
-        self.toc
-    }
-
-    #[must_use]
-    pub fn number_sections_enabled(&self) -> bool {
-        if self.no_number_sections {
-            return false;
-        }
-        self.number_sections
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -96,10 +70,8 @@ mod tests {
         Cli {
             files: vec![],
             output: None,
-            toc: true,
-            no_toc: false,
-            number_sections: true,
-            no_number_sections: false,
+            toc: false,
+            number_sections: false,
             margin: "1in".to_string(),
             font_size: "11pt".to_string(),
             include_preamble: None,
@@ -110,51 +82,28 @@ mod tests {
     }
 
     #[test]
-    fn toc_enabled_by_default() {
+    fn toc_disabled_by_default() {
         let cli = default_cli();
-        assert!(cli.toc_enabled());
+        assert!(!cli.toc);
     }
 
     #[test]
-    fn toc_disabled_by_no_toc() {
-        let mut cli = default_cli();
-        cli.no_toc = true;
-        assert!(!cli.toc_enabled());
-    }
-
-    #[test]
-    fn toc_disabled_when_toc_false() {
-        let mut cli = default_cli();
-        cli.toc = false;
-        assert!(!cli.toc_enabled());
-    }
-
-    #[test]
-    fn no_toc_overrides_toc_true() {
+    fn toc_enabled_by_flag() {
         let mut cli = default_cli();
         cli.toc = true;
-        cli.no_toc = true;
-        assert!(!cli.toc_enabled());
+        assert!(cli.toc);
     }
 
     #[test]
-    fn number_sections_enabled_by_default() {
+    fn number_sections_disabled_by_default() {
         let cli = default_cli();
-        assert!(cli.number_sections_enabled());
+        assert!(!cli.number_sections);
     }
 
     #[test]
-    fn number_sections_disabled_by_no_flag() {
-        let mut cli = default_cli();
-        cli.no_number_sections = true;
-        assert!(!cli.number_sections_enabled());
-    }
-
-    #[test]
-    fn no_number_sections_overrides_true() {
+    fn number_sections_enabled_by_flag() {
         let mut cli = default_cli();
         cli.number_sections = true;
-        cli.no_number_sections = true;
-        assert!(!cli.number_sections_enabled());
+        assert!(cli.number_sections);
     }
 }

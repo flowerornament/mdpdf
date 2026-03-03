@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::fmt::Write as _;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
@@ -86,16 +87,10 @@ fn build_inputs(content: &str, cli: &Cli) -> Dict {
     dict.insert("content".into(), content.into_value());
     dict.insert("margin".into(), cli.margin.as_str().into_value());
     dict.insert("font-size".into(), cli.font_size.as_str().into_value());
-    dict.insert(
-        "toc".into(),
-        cli.toc_enabled().to_string().as_str().into_value(),
-    );
+    dict.insert("toc".into(), cli.toc.to_string().as_str().into_value());
     dict.insert(
         "number-sections".into(),
-        cli.number_sections_enabled()
-            .to_string()
-            .as_str()
-            .into_value(),
+        cli.number_sections.to_string().as_str().into_value(),
     );
     dict
 }
@@ -146,19 +141,17 @@ fn compile_to_pdf(content: &str, cli: &Cli) -> Result<Vec<u8>> {
     // Compile with inputs
     let compiled = engine.compile_with_input(inputs);
 
-    // Log warnings
-    for warning in &compiled.warnings {
-        eprintln!("  typst warning: {warning:?}");
-    }
-
     let document: PagedDocument = compiled
         .output
-        .map_err(|e| anyhow::anyhow!("typst compilation failed: {e}"))?;
+        .map_err(|e| anyhow::anyhow!("typst compilation failed:\n  {e}"))?;
 
     // Export to PDF
     let pdf_bytes = typst_pdf::pdf(&document, &PdfOptions::default()).map_err(|diagnostics| {
-        let msgs: Vec<String> = diagnostics.iter().map(|d| format!("{d:?}")).collect();
-        anyhow::anyhow!("PDF export failed:\n{}", msgs.join("\n"))
+        let mut msg = String::from("PDF export failed:");
+        for diag in &diagnostics {
+            let _ = write!(msg, "\n  error: {}", diag.message);
+        }
+        anyhow::anyhow!("{msg}")
     })?;
 
     Ok(pdf_bytes)
@@ -176,8 +169,8 @@ pub fn format_dry_run(content: &str, cli: &Cli) -> String {
         ("content", format!("<{} bytes>", content.len())),
         ("font-size", cli.font_size.clone()),
         ("margin", cli.margin.clone()),
-        ("number-sections", cli.number_sections_enabled().to_string()),
-        ("toc", cli.toc_enabled().to_string()),
+        ("number-sections", cli.number_sections.to_string()),
+        ("toc", cli.toc.to_string()),
     ];
 
     for (k, v) in &inputs_display {
@@ -296,10 +289,8 @@ mod tests {
         Cli {
             files: vec![],
             output: None,
-            toc: true,
-            no_toc: false,
-            number_sections: true,
-            no_number_sections: false,
+            toc: false,
+            number_sections: false,
             margin: "1in".to_string(),
             font_size: "11pt".to_string(),
             include_preamble: None,
