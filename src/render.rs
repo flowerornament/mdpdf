@@ -106,6 +106,21 @@ fn strip_front_matter(content: &str) -> &str {
     }
 }
 
+/// Replace LaTeX commands that have broken mitex symbol mappings with
+/// their correct Unicode equivalents.
+///
+/// mitex 0.2.6 maps `\dashrightarrow` to the invalid typst symbol
+/// `arrow.r.dash` (should be `arrow.r.dashed`), and likewise
+/// `\dashleftarrow` to `arrow.l.dash`.  Since the mapping is baked
+/// into the mitex WASM binary, we fix it here by replacing the LaTeX
+/// commands with the corresponding Unicode characters before the
+/// content reaches the cmarker/mitex pipeline.
+fn fix_mitex_symbols(content: &str) -> String {
+    content
+        .replace("\\dashrightarrow", "\u{21E2}")
+        .replace("\\dashleftarrow", "\u{21E0}")
+}
+
 struct CompileOutput {
     pdf: Vec<u8>,
     warnings: Vec<String>,
@@ -113,6 +128,7 @@ struct CompileOutput {
 
 fn compile_to_pdf(content: &str, cli: &Cli) -> Result<CompileOutput> {
     let content = strip_front_matter(content);
+    let content = &fix_mitex_symbols(content);
     let inputs = build_inputs(content, cli);
 
     // Read optional preamble
@@ -366,5 +382,28 @@ mod tests {
         let output = format_dry_run(content, &cli);
         // Size should reflect stripped content, not original
         assert!(output.contains("<11 bytes>"));
+    }
+
+    #[test]
+    fn fix_mitex_symbols_dashrightarrow() {
+        let input = r"$$a \dashrightarrow b$$";
+        let result = fix_mitex_symbols(input);
+        assert!(result.contains('\u{21E2}'));
+        assert!(!result.contains("dashrightarrow"));
+    }
+
+    #[test]
+    fn fix_mitex_symbols_dashleftarrow() {
+        let input = r"$$a \dashleftarrow b$$";
+        let result = fix_mitex_symbols(input);
+        assert!(result.contains('\u{21E0}'));
+        assert!(!result.contains("dashleftarrow"));
+    }
+
+    #[test]
+    fn fix_mitex_symbols_no_false_positives() {
+        let input = r"$$a \rightarrow b$$";
+        let result = fix_mitex_symbols(input);
+        assert_eq!(result, input);
     }
 }
