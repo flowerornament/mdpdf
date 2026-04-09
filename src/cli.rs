@@ -82,19 +82,7 @@ pub struct Cli {
 
 impl Default for Cli {
     fn default() -> Self {
-        Self {
-            files: vec![],
-            output: None,
-            toc: false,
-            number_sections: false,
-            margin: "1in".to_string(),
-            font_size: "11pt".to_string(),
-            include_preamble: None,
-            json: false,
-            dry_run: false,
-            verbose: false,
-            jobs: 8,
-        }
+        Self::try_parse_from(["mdpdf"]).expect("default CLI args should parse")
     }
 }
 
