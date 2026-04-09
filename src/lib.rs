@@ -80,7 +80,7 @@ pub fn run_with(cli: &Cli) -> ExitCode {
             result.print_human();
         }
 
-        return if result.success {
+        return if result.success() {
             ExitCode::SUCCESS
         } else {
             ExitCode::from(1)
@@ -112,7 +112,7 @@ pub fn run_with(cli: &Cli) -> ExitCode {
 
     let mut fail_count = 0usize;
     for result in &results {
-        if !result.success {
+        if !result.success() {
             fail_count += 1;
         }
         if cli.json {
@@ -154,7 +154,7 @@ fn run_stdin_mode(cli: &Cli) -> ExitCode {
         result.print_human();
     }
 
-    if result.success {
+    if result.success() {
         ExitCode::SUCCESS
     } else {
         ExitCode::from(1)

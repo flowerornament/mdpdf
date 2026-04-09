@@ -6,17 +6,27 @@ use serde::Serialize;
 /// for `--json` mode; also drives human-readable stderr output.
 #[derive(Debug, Serialize)]
 pub struct RenderResult {
-    pub input: String,
-    pub output: String,
-    pub success: bool,
-    pub time_ms: u64,
+    input: String,
+    output: String,
+    success: bool,
+    time_ms: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
+    error: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub warnings: Vec<String>,
+    warnings: Vec<String>,
 }
 
 impl RenderResult {
+    #[must_use]
+    pub fn success(&self) -> bool {
+        self.success
+    }
+
+    #[must_use]
+    pub fn error(&self) -> Option<&str> {
+        self.error.as_deref()
+    }
+
     /// Start building a result for the given input/output pair.
     #[must_use]
     pub fn builder<'a>(input: &str, output: &str, start: &'a Instant) -> RenderResultBuilder<'a> {
@@ -86,7 +96,7 @@ impl RenderResultBuilder<'_> {
     }
 
     #[must_use]
-    pub fn fail(self, error: &impl ToString) -> RenderResult {
+    pub fn fail(self, error: &(impl ToString + ?Sized)) -> RenderResult {
         let time_ms = elapsed_ms(self.start);
         RenderResult {
             input: self.input,

@@ -32,47 +32,51 @@ static PACKAGES: LazyLock<[Package; 2]> = LazyLock::new(|| {
     )
 });
 
-/// Resolves files from embedded typst packages.
-struct EmbeddedPackageResolver {
+/// Parsed package data cached in a static to avoid re-decompressing archives
+/// on every compilation.
+struct PackageData {
     sources: HashMap<FileId, Source>,
     binaries: HashMap<FileId, Bytes>,
 }
 
-impl EmbeddedPackageResolver {
-    fn new(packages: &[Package]) -> Self {
-        let mut sources = HashMap::new();
-        let mut binaries = HashMap::new();
+static PACKAGE_DATA: LazyLock<PackageData> = LazyLock::new(|| {
+    let mut sources = HashMap::new();
+    let mut binaries = HashMap::new();
 
-        for pkg in packages {
-            let files = pkg
-                .read_archive()
-                .expect("embedded package archive should be readable");
-            for file in files {
-                match file {
-                    tep::File::Source(source) => {
-                        sources.insert(source.id(), source);
-                    }
-                    tep::File::File(id, bytes) => {
-                        binaries.insert(id, bytes);
-                    }
+    for pkg in &*PACKAGES {
+        let files = pkg
+            .read_archive()
+            .expect("embedded package archive should be readable");
+        for file in files {
+            match file {
+                tep::File::Source(source) => {
+                    sources.insert(source.id(), source);
+                }
+                tep::File::File(id, bytes) => {
+                    binaries.insert(id, bytes);
                 }
             }
         }
-
-        Self { sources, binaries }
     }
-}
+
+    PackageData { sources, binaries }
+});
+
+/// Zero-sized resolver that looks up files from the cached [`PACKAGE_DATA`] static.
+struct EmbeddedPackageResolver;
 
 impl FileResolver for EmbeddedPackageResolver {
     fn resolve_binary(&self, id: FileId) -> FileResult<Cow<'_, Bytes>> {
-        self.binaries
+        PACKAGE_DATA
+            .binaries
             .get(&id)
             .map(Cow::Borrowed)
             .ok_or_else(|| FileError::NotFound(id.vpath().as_rootless_path().into()))
     }
 
     fn resolve_source(&self, id: FileId) -> FileResult<Cow<'_, Source>> {
-        self.sources
+        PACKAGE_DATA
+            .sources
             .get(&id)
             .map(Cow::Borrowed)
             .ok_or_else(|| FileError::NotFound(id.vpath().as_rootless_path().into()))
@@ -93,16 +97,25 @@ fn build_inputs(content: &str, cli: &Cli) -> Dict {
 }
 
 /// Strip YAML front-matter (a `---`-delimited block at the start of the file).
+/// The closing `---` must appear on its own line (followed by newline or EOF).
 fn strip_front_matter(content: &str) -> &str {
     let trimmed = content.trim_start();
     let Some(after_open) = trimmed.strip_prefix("---") else {
         return content;
     };
-    // Find the closing `---` (must be on its own line after the opening)
-    if let Some((_, rest)) = after_open.split_once("\n---") {
-        rest.strip_prefix('\n').unwrap_or(rest)
-    } else {
-        content
+    // Find closing `---` on its own line (must be followed by newline or EOF)
+    let mut search_from = 0;
+    loop {
+        let Some(idx) = after_open[search_from..].find("\n---") else {
+            return content;
+        };
+        let abs = search_from + idx;
+        let end = abs + 4; // byte after "\n---"
+        if end >= after_open.len() || after_open.as_bytes()[end] == b'\n' {
+            let rest = &after_open[end..];
+            return rest.strip_prefix('\n').unwrap_or(rest);
+        }
+        search_from = end;
     }
 }
 
@@ -115,10 +128,16 @@ fn strip_front_matter(content: &str) -> &str {
 /// into the mitex WASM binary, we fix it here by replacing the LaTeX
 /// commands with the corresponding Unicode characters before the
 /// content reaches the cmarker/mitex pipeline.
-fn fix_mitex_symbols(content: &str) -> String {
-    content
-        .replace("\\dashrightarrow", "\u{21E2}")
-        .replace("\\dashleftarrow", "\u{21E0}")
+fn fix_mitex_symbols(content: &str) -> Cow<'_, str> {
+    if content.contains("\\dashrightarrow") || content.contains("\\dashleftarrow") {
+        Cow::Owned(
+            content
+                .replace("\\dashrightarrow", "\u{21E2}")
+                .replace("\\dashleftarrow", "\u{21E0}"),
+        )
+    } else {
+        Cow::Borrowed(content)
+    }
 }
 
 struct CompileOutput {
@@ -128,8 +147,8 @@ struct CompileOutput {
 
 fn compile_to_pdf(content: &str, cli: &Cli) -> Result<CompileOutput> {
     let content = strip_front_matter(content);
-    let content = &fix_mitex_symbols(content);
-    let inputs = build_inputs(content, cli);
+    let content = fix_mitex_symbols(content);
+    let inputs = build_inputs(&content, cli);
 
     // Read optional preamble
     let preamble = if let Some(ref path) = cli.include_preamble {
@@ -142,15 +161,13 @@ fn compile_to_pdf(content: &str, cli: &Cli) -> Result<CompileOutput> {
 
     let full_template = format!("{preamble}{TEMPLATE}");
 
-    // Build package resolver
-    let pkg_resolver = EmbeddedPackageResolver::new(&*PACKAGES);
-
-    // Build engine with embedded fonts and packages
+    // Build engine with embedded fonts and packages (resolver is a ZST
+    // backed by the cached PACKAGE_DATA static)
     let font_opts = TypstKitFontOptions::new().include_system_fonts(false);
     let engine = TypstEngine::builder()
         .main_file(("main.typ", full_template.as_str()))
         .search_fonts_with(font_opts)
-        .add_file_resolver(pkg_resolver)
+        .add_file_resolver(EmbeddedPackageResolver)
         .build();
 
     // Compile with inputs
@@ -264,7 +281,7 @@ pub fn render_stdin(output: &Path, cli: &Cli) -> RenderResult {
     }
 
     if content.is_empty() {
-        return r.fail(&"no input on stdin");
+        return r.fail("no input on stdin");
     }
 
     match compile_to_pdf(&content, cli) {
@@ -366,6 +383,13 @@ mod tests {
     fn strip_front_matter_unclosed() {
         let input = "---\ntitle: Hello\n# No closing delimiter\n";
         assert_eq!(strip_front_matter(input), input);
+    }
+
+    #[test]
+    fn strip_front_matter_dashes_in_value() {
+        // `---` not on its own line should not be treated as a closing delimiter
+        let input = "---\ntitle: Hello\n---baz\n---\n# Heading\n";
+        assert_eq!(strip_front_matter(input), "# Heading\n");
     }
 
     #[test]

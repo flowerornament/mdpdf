@@ -63,7 +63,7 @@ fn compare_fixture(name: &str) {
     let output = dir.path().join(default_output_path(Path::new(name)));
     let cli = Cli::default();
     let result = render_one(&input, &output, &cli);
-    assert!(result.success, "{name}: {:?}", result.error);
+    assert!(result.success(), "{name}: {:?}", result.error());
 
     let typst_text = normalize(&extract_text(&output));
     let pandoc_text = normalize(&std::fs::read_to_string(&ref_path).expect("read reference"));
@@ -76,10 +76,9 @@ fn compare_fixture(name: &str) {
     // Check that the typst output contains most of the pandoc reference content
     // (fuzzy: we check that key content words appear)
     let pandoc_words: Vec<&str> = pandoc_text.split_whitespace().collect();
-    let typst_full = typst_text.clone();
     let mut found = 0;
     for word in &pandoc_words {
-        if typst_full.contains(word) {
+        if typst_text.contains(word) {
             found += 1;
         }
     }

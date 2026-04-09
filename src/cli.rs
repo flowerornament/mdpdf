@@ -2,6 +2,20 @@ use std::path::PathBuf;
 
 use clap::Parser;
 
+fn parse_dimension(s: &str) -> Result<String, String> {
+    let s = s.trim();
+    for unit in ["in", "cm", "mm", "pt", "em"] {
+        if let Some(num) = s.strip_suffix(unit)
+            && num.trim().parse::<f64>().is_ok()
+        {
+            return Ok(s.to_string());
+        }
+    }
+    Err(format!(
+        "invalid dimension '{s}': expected <number><unit> (e.g. 1in, 0.75in, 2cm, 11pt)"
+    ))
+}
+
 /// Markdown-to-PDF transducer with built-in unicode math support.
 ///
 /// Converts markdown files to beautifully typeset PDFs using typst.
@@ -38,11 +52,11 @@ pub struct Cli {
     pub number_sections: bool,
 
     /// Page margin (e.g. 1in, 0.75in, 2cm).
-    #[arg(long, default_value = "1in")]
+    #[arg(long, default_value = "1in", value_parser = parse_dimension)]
     pub margin: String,
 
     /// Font size (e.g. 10pt, 11pt, 12pt).
-    #[arg(long, default_value = "11pt")]
+    #[arg(long, default_value = "11pt", value_parser = parse_dimension)]
     pub font_size: String,
 
     /// Additional typst code to include before the template.

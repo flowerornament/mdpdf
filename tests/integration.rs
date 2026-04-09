@@ -15,7 +15,7 @@ fn render_fixture(name: &str, cli: &Cli) -> mdpdf::report::RenderResult {
     let output = dir.path().join(default_output_path(Path::new(name)));
     let result = render_one(&input, &output, cli);
     // Keep tempdir alive long enough to check the file
-    if result.success {
+    if result.success() {
         assert!(output.exists(), "output file should exist: {name}");
         let meta = std::fs::metadata(&output).expect("metadata");
         assert!(meta.len() > 0, "output file should be non-empty: {name}");
@@ -28,43 +28,43 @@ fn render_fixture(name: &str, cli: &Cli) -> mdpdf::report::RenderResult {
 #[test]
 fn render_basic() {
     let result = render_fixture("basic.md", &Cli::default());
-    assert!(result.success, "basic.md: {:?}", result.error);
+    assert!(result.success(), "basic.md: {:?}", result.error());
 }
 
 #[test]
 fn render_math() {
     let result = render_fixture("math.md", &Cli::default());
-    assert!(result.success, "math.md: {:?}", result.error);
+    assert!(result.success(), "math.md: {:?}", result.error());
 }
 
 #[test]
 fn render_unicode() {
     let result = render_fixture("unicode.md", &Cli::default());
-    assert!(result.success, "unicode.md: {:?}", result.error);
+    assert!(result.success(), "unicode.md: {:?}", result.error());
 }
 
 #[test]
 fn render_tables() {
     let result = render_fixture("tables.md", &Cli::default());
-    assert!(result.success, "tables.md: {:?}", result.error);
+    assert!(result.success(), "tables.md: {:?}", result.error());
 }
 
 #[test]
 fn render_code() {
     let result = render_fixture("code.md", &Cli::default());
-    assert!(result.success, "code.md: {:?}", result.error);
+    assert!(result.success(), "code.md: {:?}", result.error());
 }
 
 #[test]
 fn render_headings() {
     let result = render_fixture("headings.md", &Cli::default());
-    assert!(result.success, "headings.md: {:?}", result.error);
+    assert!(result.success(), "headings.md: {:?}", result.error());
 }
 
 #[test]
 fn render_long() {
     let result = render_fixture("long.md", &Cli::default());
-    assert!(result.success, "long.md: {:?}", result.error);
+    assert!(result.success(), "long.md: {:?}", result.error());
 }
 
 // --- Feature tests ---
@@ -78,7 +78,7 @@ fn toc_produces_larger_output() {
     let out_no_toc = dir.path().join("no_toc.pdf");
     let cli_no_toc = Cli::default();
     let r1 = render_one(&input, &out_no_toc, &cli_no_toc);
-    assert!(r1.success, "no toc: {:?}", r1.error);
+    assert!(r1.success(), "no toc: {:?}", r1.error());
 
     // With TOC
     let out_toc = dir.path().join("with_toc.pdf");
@@ -87,7 +87,7 @@ fn toc_produces_larger_output() {
         ..Cli::default()
     };
     let r2 = render_one(&input, &out_toc, &cli_toc);
-    assert!(r2.success, "with toc: {:?}", r2.error);
+    assert!(r2.success(), "with toc: {:?}", r2.error());
 
     let size_no_toc = std::fs::metadata(&out_no_toc).unwrap().len();
     let size_toc = std::fs::metadata(&out_toc).unwrap().len();
@@ -104,7 +104,7 @@ fn custom_margin_renders() {
         ..Cli::default()
     };
     let result = render_fixture("basic.md", &cli);
-    assert!(result.success, "custom margin: {:?}", result.error);
+    assert!(result.success(), "custom margin: {:?}", result.error());
 }
 
 #[test]
@@ -114,7 +114,7 @@ fn custom_font_size_renders() {
         ..Cli::default()
     };
     let result = render_fixture("basic.md", &cli);
-    assert!(result.success, "custom font size: {:?}", result.error);
+    assert!(result.success(), "custom font size: {:?}", result.error());
 }
 
 // --- Error cases ---
@@ -126,8 +126,8 @@ fn missing_file_returns_failure() {
     let dir = tempfile::tempdir().expect("tempdir");
     let output = dir.path().join("out.pdf");
     let result = render_one(input, &output, &cli);
-    assert!(!result.success);
-    assert!(result.error.is_some());
+    assert!(!result.success());
+    assert!(result.error().is_some());
 }
 
 // --- Dry run ---
