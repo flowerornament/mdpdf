@@ -36,7 +36,7 @@ mdpdf *.md --json
 mdpdf doc.md --dry-run
 
 # Custom layout
-mdpdf doc.md --margin 0.75in --font-size 12pt --no-toc
+mdpdf doc.md --margin 0.75in --font-size 12pt --toc
 
 # Nushell pipeline
 ls *.md | get name | each { mdpdf $in --json } | from json
@@ -56,8 +56,8 @@ ls *.md | get name | each { mdpdf $in --json } | from json
 | Flag | Default | Description |
 |------|---------|-------------|
 | `-o, --output` | `<stem>.pdf` | Output file path |
-| `--toc / --no-toc` | `--toc` | Table of contents |
-| `--number-sections / --no-number-sections` | `--number-sections` | Section numbering |
+| `--toc` | off | Table of contents |
+| `--number-sections` | off | Section numbering |
 | `--margin` | `1in` | Page margins |
 | `--font-size` | `11pt` | Font size |
 | `--include-preamble` | — | Additional typst code to prepend |
