@@ -46,6 +46,7 @@ ls *.md | get name | each { mdpdf $in --json } | from json
 
 - **Native unicode** — Greek letters, math operators, arrows, set theory, sub/superscripts, blackboard bold — all rendered natively by typst
 - **LaTeX math** — `$$E = mc^2$$` fenced math blocks rendered via mitex
+- **Tables that hold their shape** — narrow cells set ragged right, and long inline-code identifiers wrap instead of spilling into the next column
 - **Zero dependencies** — typst compiler and fonts are embedded in the binary
 - **Parallel rendering** — batch converts up to 8 files concurrently (configurable with `-J`)
 - **Structured output** — `--json` emits one JSONL object per file with timing and error details

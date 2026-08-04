@@ -61,7 +61,14 @@ fn compare_fixture(name: &str) {
     let input = fixture(name);
     let dir = tempfile::tempdir().expect("tempdir");
     let output = dir.path().join(default_output_path(Path::new(name)));
-    let cli = Cli::default();
+    // `generate_references.sh` runs pandoc with `--toc --number-sections`, so
+    // render the same way. Otherwise the reference's contents page — mostly
+    // dot leaders — counts as content the comparison can never match.
+    let cli = Cli {
+        toc: true,
+        number_sections: true,
+        ..Cli::default()
+    };
     let result = render_one(&input, &output, &cli);
     assert!(result.success(), "{name}: {:?}", result.error());
 
@@ -84,13 +91,14 @@ fn compare_fixture(name: &str) {
     }
     #[allow(clippy::cast_precision_loss)]
     let word_overlap = f64::from(found) / pandoc_words.len().max(1) as f64;
-    eprintln!("  {name}: word overlap = {word_overlap:.1}%");
+    eprintln!("  {name}: word overlap = {:.1}%", word_overlap * 100.0);
 
     // We expect at least 50% word overlap (generous threshold —
     // different renderers produce different formatting)
     assert!(
         word_overlap > 0.5,
-        "{name}: word overlap too low: {word_overlap:.1}% ({found}/{} words)",
+        "{name}: word overlap too low: {:.1}% ({found}/{} words)",
+        word_overlap * 100.0,
         pandoc_words.len()
     );
 }

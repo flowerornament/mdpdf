@@ -112,6 +112,12 @@ Typst compilation errors are captured and relayed in the `error` field of `Rende
 
 Uses rayon's thread pool. Thread count configurable via `--jobs`.
 
+### Table layout
+
+Markdown tables become typst tables with content-sized columns, so a cell is often only an inch or two wide. Cells set ragged right and hyphenate rather than justify, which avoids the rivers that justification opens at that measure.
+
+Long inline-code tokens are the failure case that matters. Unicode line breaking offers no break inside `Herald.Medium.NodeSchemaCatalog` — a full stop between letters does not break, nor does a camel-case hump — so the token overruns its column and collides with the neighbouring cell. Inline code longer than 12 characters gains zero-width spaces after separator punctuation and before capitals, giving the line breaker somewhere to go. Shorter spans and fenced code blocks are left byte-for-byte intact so copied code stays correct.
+
 ### Unicode coverage
 
 Typst handles unicode natively — no character mapping tables needed. Greek letters, math operators, arrows, subscripts, superscripts, and all other unicode symbols render correctly out of the box.
