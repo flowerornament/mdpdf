@@ -32,12 +32,13 @@ Pipeline: **Markdown → cmarker (CommonMark → typst) → mitex (LaTeX math �
 
 Key crates:
 - `typst-as-lib` — Builder wrapping the typst compiler with font embedding
+- `typst-layout` — Supplies `PagedDocument`, the compiled layout handed to the PDF exporter
 - `typst-pdf` — PDF export from compiled typst documents
 - `typst-embedded-package` — Compile-time embedding of typst package tarballs
 
 Embedded packages:
-- `@preview/cmarker:0.1.8` — CommonMark rendering in typst
-- `@preview/mitex:0.2.6` — LaTeX math rendering in typst
+- `@preview/cmarker:0.1.10` — CommonMark rendering in typst
+- `@preview/mitex:0.2.7` — LaTeX math rendering in typst
 
 ### Transducer model
 

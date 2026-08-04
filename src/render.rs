@@ -9,12 +9,12 @@ use std::time::Instant;
 use anyhow::{Context, Result};
 use typst::diag::{FileError, FileResult};
 use typst::foundations::{Bytes, Dict, IntoValue};
-use typst::layout::PagedDocument;
 use typst::syntax::{FileId, Source};
 use typst_as_lib::TypstEngine;
 use typst_as_lib::file_resolver::FileResolver;
 use typst_as_lib::typst_kit_options::TypstKitFontOptions;
 use typst_embedded_package::{self as tep, Package, include_package};
+use typst_layout::PagedDocument;
 use typst_pdf::PdfOptions;
 
 use crate::cli::Cli;
@@ -26,8 +26,8 @@ static PACKAGES: LazyLock<[Package; 2]> = LazyLock::new(|| {
     include_package!(
         "typst-packages"
         [
-            "preview" "cmarker" (0, 1, 8),
-            "preview" "mitex" (0, 2, 6),
+            "preview" "cmarker" (0, 1, 10),
+            "preview" "mitex" (0, 2, 7),
         ]
     )
 });
@@ -71,7 +71,7 @@ impl FileResolver for EmbeddedPackageResolver {
             .binaries
             .get(&id)
             .map(Cow::Borrowed)
-            .ok_or_else(|| FileError::NotFound(id.vpath().as_rootless_path().into()))
+            .ok_or_else(|| FileError::NotFound(id.vpath().get_without_slash().into()))
     }
 
     fn resolve_source(&self, id: FileId) -> FileResult<Cow<'_, Source>> {
@@ -79,7 +79,7 @@ impl FileResolver for EmbeddedPackageResolver {
             .sources
             .get(&id)
             .map(Cow::Borrowed)
-            .ok_or_else(|| FileError::NotFound(id.vpath().as_rootless_path().into()))
+            .ok_or_else(|| FileError::NotFound(id.vpath().get_without_slash().into()))
     }
 }
 
@@ -122,7 +122,7 @@ fn strip_front_matter(content: &str) -> &str {
 /// Replace LaTeX commands that have broken mitex symbol mappings with
 /// their correct Unicode equivalents.
 ///
-/// mitex 0.2.6 maps `\dashrightarrow` to the invalid typst symbol
+/// mitex 0.2.7 maps `\dashrightarrow` to the invalid typst symbol
 /// `arrow.r.dash` (should be `arrow.r.dashed`), and likewise
 /// `\dashleftarrow` to `arrow.l.dash`.  Since the mapping is baked
 /// into the mitex WASM binary, we fix it here by replacing the LaTeX
