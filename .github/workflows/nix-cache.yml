@@ -1,0 +1,26 @@
+name: Nix Cache
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nix-cache-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  cache:
+    uses: flowerornament/nx-rs/.github/workflows/nix-cache-package.yml@b3d99ba91a987897488eec093b58805210795087
+    with:
+      executable: mdpdf
+      matrix: >-
+        [
+          {"system":"aarch64-darwin","runner":"macos-15"},
+          {"system":"aarch64-linux","runner":"ubuntu-24.04-arm"},
+          {"system":"x86_64-linux","runner":"ubuntu-24.04"}
+        ]
+    secrets:
+      CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}

@@ -91,6 +91,26 @@ some-crate = "9.9.9"
             ],
         )
 
+    def test_failed_cache_gate_cannot_mutate_git(self) -> None:
+        clean_result = release.subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr=""
+        )
+        with (
+            patch.object(release, "cargo_version", return_value="0.3.1"),
+            patch.object(release.subprocess, "run", return_value=clean_result),
+            patch.object(release, "verify_release_cache", side_effect=SystemExit(1)),
+            patch.object(release, "run") as mutate_git,
+            self.assertRaises(SystemExit),
+        ):
+            release.tag("0.3.1")
+
+        mutate_git.assert_not_called()
+
+    def test_cache_matrix_matches_package_systems(self) -> None:
+        self.assertEqual(
+            release.cache_workflow_systems(), release.flake_package_systems()
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

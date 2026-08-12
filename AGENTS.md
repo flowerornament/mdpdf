@@ -56,6 +56,12 @@ A Stop hook runs `just check` before ending any session. If fmt, lint, or tests 
 
 ## Release Flow
 
+The producer's committed `flake.lock` defines the cached package identity.
+Standalone users can run `nix run github:flowerornament/mdpdf/release` or
+install with `nix profile add github:flowerornament/mdpdf/release`. The flake
+advertises the public flowerornament Cachix cache; source builds remain
+available when the cache is unavailable.
+
 Release automation is local-first and tag-driven. Day-to-day work lands on `main`; release commits are ordinary commits on `main`; downstream flake consumers that want the latest published release should track `refs/heads/release`.
 
 The `release` branch is generated state. `just release-tag` moves it to the new annotated version tag with `--force-with-lease` after the tag push.
@@ -85,6 +91,10 @@ git ls-remote origin refs/heads/release 'refs/tags/v0.2.1^{}'
 `just release-verify` intentionally requires a clean worktree. Commit the release-prep changes before running it so the Nix build sees the same git-tracked source that will be tagged.
 
 `just release-verify` checks version alignment across `Cargo.toml`, `Cargo.lock`, and `flake.nix`; CHANGELOG readiness with no `TODO`/`TBD` placeholders; then runs `just check`, `just build`, `nix build .`, `nix run . -- --help`, and `./target/release/mdpdf --help`.
+
+After pushing the release commit, wait for the Nix Cache workflow and run
+`just cache-verify`. `just release-tag` repeats that cache gate before creating
+the tag or moving `origin/release`.
 
 `just release-tag` creates and pushes `vX.Y.Z`, then publishes `origin/release` at the same commit. It prompts before running because this is the public release step; use `just --yes release-tag X.Y.Z` only for explicit automation. The final `git ls-remote` check should show matching object IDs for `refs/heads/release` and the peeled tag.
 

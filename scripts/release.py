@@ -12,6 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+$")
+CACHE_URI = "https://flowerornament.cachix.org"
 
 
 def fail(message: str) -> None:
@@ -62,6 +63,19 @@ def flake_version() -> str:
     if match is None:
         fail('could not find mdpdf buildRustPackage version in flake.nix')
     return match.group(1)
+
+
+def flake_package_systems() -> list[str]:
+    text = read_text(ROOT / "flake.nix")
+    match = re.search(r"(?m)^\s*forAllSystems = nixpkgs.lib.genAttrs \[(?P<body>[^]]+)\];$", text)
+    if match is None:
+        fail("could not find package systems in flake.nix")
+    return re.findall(r'"([^"]+)"', match.group("body"))
+
+
+def cache_workflow_systems() -> list[str]:
+    text = read_text(ROOT / ".github/workflows/nix-cache.yml")
+    return re.findall(r'"system"\s*:\s*"([^"]+)"', text)
 
 
 def changelog_text() -> str:
@@ -176,6 +190,51 @@ def run(cmd: list[str]) -> None:
     subprocess.run(cmd, cwd=ROOT, check=True)
 
 
+def capture(cmd: list[str]) -> str:
+    result = subprocess.run(
+        cmd, cwd=ROOT, check=True, stdout=subprocess.PIPE, text=True
+    )
+    return result.stdout.strip()
+
+
+def nix_output_path(system: str) -> str:
+    return capture(
+        [
+            "nix", "eval", "--accept-flake-config", "--raw",
+            f".#packages.{system}.default.outPath",
+        ]
+    )
+
+
+def cache_contains(path: str) -> bool:
+    return subprocess.run(
+        [
+            "nix", "path-info", "--store", CACHE_URI,
+            "--option", "narinfo-cache-negative-ttl", "0", path,
+        ],
+        cwd=ROOT,
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    ).returncode == 0
+
+
+def verify_release_cache() -> None:
+    missing = [
+        (system, output)
+        for system in flake_package_systems()
+        if not cache_contains(output := nix_output_path(system))
+    ]
+    if missing:
+        details = "\n".join(f"  - {system}: {output}" for system, output in missing)
+        fail(
+            "release outputs are missing from the public Cachix cache:\n"
+            f"{details}\n"
+            "Wait for the Nix Cache workflow for this commit to succeed, then retry."
+        )
+    print("all advertised Nix package outputs are present in Cachix")
+
+
 def dirty_worktree_entries(status: str) -> list[str]:
     return [line for line in status.splitlines() if line.strip()]
 
@@ -225,6 +284,14 @@ def verify() -> None:
         details = ", ".join(f"{name}={version}" for name, version in versions.items())
         fail(f"release versions do not match: {details}")
 
+    package_systems = flake_package_systems()
+    cache_systems = cache_workflow_systems()
+    if cache_systems != package_systems:
+        fail(
+            "Nix cache systems do not match flake.nix: "
+            f"flake={package_systems}, workflow={cache_systems}"
+        )
+
     version = unique_versions.pop()
     if not changelog_entry_is_ready(version):
         fail(
@@ -262,6 +329,8 @@ def tag(version: str) -> None:
     if tags.stdout.strip():
         fail(f"tag {tag_name} already exists")
 
+    verify_release_cache()
+
     run(["git", "tag", "-a", tag_name, "-m", tag_name])
     run(["git", "push", "origin", tag_name])
     update_release_branch(tag_name)
@@ -275,6 +344,9 @@ def main() -> None:
     bump_parser.add_argument("version")
 
     subparsers.add_parser("verify", help="run release readiness checks")
+    subparsers.add_parser(
+        "cache-verify", help="verify every advertised Nix package output is cached"
+    )
 
     tag_parser = subparsers.add_parser("tag", help="create and push a release tag")
     tag_parser.add_argument("version")
@@ -284,6 +356,8 @@ def main() -> None:
         bump(args.version)
     elif args.command == "verify":
         verify()
+    elif args.command == "cache-verify":
+        verify_release_cache()
     else:
         tag(args.version)
 

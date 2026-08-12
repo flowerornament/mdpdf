@@ -2,6 +2,16 @@
 
 All notable changes to `mdpdf` are documented in this file.
 
+## v0.3.1 - 2026-08-12
+
+### Changed
+
+- publishes producer-locked native Nix packages to the public flowerornament
+  Cachix cache and proves substitution before a release can be tagged
+- supports Apple Silicon macOS and aarch64/x86_64 Linux, matching current
+  Nixpkgs platform support
+- exposes a default flake app and standalone cache-aware Nix installation
+
 ## v0.3.0 - 2026-08-04
 
 ### Changed

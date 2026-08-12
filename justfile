@@ -63,6 +63,11 @@ release-bump version:
 release-verify:
     python3 scripts/release.py verify
 
+# Verify all advertised package outputs are in the public cache.
+[group('release')]
+cache-verify:
+    python3 scripts/release.py cache-verify
+
 # Create and push an annotated release tag, then publish origin/release.
 [group('release')]
 [arg('version', pattern='[0-9]+\.[0-9]+\.[0-9]+', help='Semver release, e.g. 0.2.1')]
